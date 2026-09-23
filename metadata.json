@@ -1,0 +1,7 @@
+{
+  "name": "BrandStudio - Batch Watermark & AI Media Purifier",
+  "description": "Batch watermark, logo branding, tag management, and automatic AI fingerprint removal for photos, videos, and ZIP archives.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
