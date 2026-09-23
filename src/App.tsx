@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { Eye, Layers, Sliders, Tag as TagIcon } from 'lucide-react';
 import { Header } from './components/Header';
 import { MediaTray } from './components/MediaTray';
 import { InteractiveCanvas } from './components/InteractiveCanvas';
@@ -41,6 +42,9 @@ export default function App() {
   const [activeId, setActiveId] = useState<string | null>(() => {
     return SAMPLE_MEDIA_LIST[0]?.id || null;
   });
+
+  // Mobile navigation tab: 'canvas' | 'brand' | 'edits' | 'tags'
+  const [mobileTab, setMobileTab] = useState<'canvas' | 'brand' | 'edits' | 'tags'>('canvas');
 
   // Global Brand and Watermark Configuration
   const [globalConfig, setGlobalConfig] = useState<GlobalBrandConfig>(INITIAL_BRAND_CONFIG);
@@ -529,6 +533,8 @@ export default function App() {
     if (newMediaItems.length > 0) {
       setItems((prev) => [...prev, ...newMediaItems]);
       setActiveId(newMediaItems[0].id);
+      setSelectedTagFilter(null); // Ensure all newly uploaded files are immediately visible
+      setMobileTab('canvas'); // Take user directly to interactive canvas preview
     }
 
     setUploadProgressText('Purification Complete! Adding to Studio...');
@@ -548,6 +554,8 @@ export default function App() {
     }));
     setItems((prev) => [...prev, ...demoItems]);
     setActiveId(demoItems[0].id);
+    setSelectedTagFilter(null);
+    setMobileTab('canvas');
   };
 
   return (
@@ -563,22 +571,28 @@ export default function App() {
       />
 
       {/* Main Studio Area */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Central Workspace: Interactive Canvas */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Central Workspace: Interactive Canvas (full-width on mobile when on canvas tab) */}
         {activeItem ? (
-          <InteractiveCanvas
-            item={activeItem}
-            overlays={activeOverlays}
-            isCustomForItem={activeItem.hasCustomOverlays}
-            onUpdateOverlay={handleUpdateOverlay}
-            onDeleteOverlay={handleDeleteOverlay}
-            onDuplicateOverlay={handleDuplicateOverlay}
-            onSelectOverlay={setSelectedOverlayId}
-            selectedOverlayId={selectedOverlayId}
-            onResetToGlobal={handleResetToGlobal}
-            onApplyCurrentToAll={handleApplyCurrentToAll}
-            onOpenAIInspector={() => setIsAIInspectorOpen(true)}
-          />
+          <div
+            className={`flex-1 flex overflow-hidden ${
+              mobileTab !== 'canvas' ? 'hidden md:flex' : 'flex'
+            }`}
+          >
+            <InteractiveCanvas
+              item={activeItem}
+              overlays={activeOverlays}
+              isCustomForItem={activeItem.hasCustomOverlays}
+              onUpdateOverlay={handleUpdateOverlay}
+              onDeleteOverlay={handleDeleteOverlay}
+              onDuplicateOverlay={handleDuplicateOverlay}
+              onSelectOverlay={setSelectedOverlayId}
+              selectedOverlayId={selectedOverlayId}
+              onResetToGlobal={handleResetToGlobal}
+              onApplyCurrentToAll={handleApplyCurrentToAll}
+              onOpenAIInspector={() => setIsAIInspectorOpen(true)}
+            />
+          </div>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-zinc-500 space-y-4">
             <p className="text-sm">No media in queue.</p>
@@ -591,27 +605,86 @@ export default function App() {
           </div>
         )}
 
-        {/* Right Editor Sidebar */}
+        {/* Right Editor Sidebar (full screen on mobile when settings tab chosen, docked on right on desktop) */}
         {activeItem && (
-          <MediaEditorSidebar
-            item={activeItem}
-            globalConfig={globalConfig}
-            onUpdateGlobalConfig={(updates) => setGlobalConfig((prev) => ({ ...prev, ...updates }))}
-            onUpdateItemEdits={handleUpdateItemEdits}
-            onUpdateItemTags={handleUpdateItemTags}
-            onBatchApplyTagsToAll={handleBatchApplyTagsToAll}
-            onBatchApplyEditsToAll={handleBatchApplyEditsToAll}
-            onExportSingleMedia={handleExportSingleMedia}
-            onAddTextOverlay={handleAddTextOverlay}
-            onUpdateOverlay={handleUpdateOverlay}
-            onDeleteOverlay={handleDeleteOverlay}
-            onApplyPresetLayout={handleApplyPresetLayout}
-            activeOverlays={activeOverlays}
-            selectedOverlayId={selectedOverlayId}
-            onSelectOverlay={setSelectedOverlayId}
-          />
+          <div
+            className={`h-full ${
+              mobileTab === 'canvas' ? 'hidden md:flex' : 'flex flex-1 md:flex-initial'
+            }`}
+          >
+            <MediaEditorSidebar
+              item={activeItem}
+              globalConfig={globalConfig}
+              onUpdateGlobalConfig={(updates) => setGlobalConfig((prev) => ({ ...prev, ...updates }))}
+              onUpdateItemEdits={handleUpdateItemEdits}
+              onUpdateItemTags={handleUpdateItemTags}
+              onBatchApplyTagsToAll={handleBatchApplyTagsToAll}
+              onBatchApplyEditsToAll={handleBatchApplyEditsToAll}
+              onExportSingleMedia={handleExportSingleMedia}
+              onAddTextOverlay={handleAddTextOverlay}
+              onUpdateOverlay={handleUpdateOverlay}
+              onDeleteOverlay={handleDeleteOverlay}
+              onApplyPresetLayout={handleApplyPresetLayout}
+              activeOverlays={activeOverlays}
+              selectedOverlayId={selectedOverlayId}
+              onSelectOverlay={setSelectedOverlayId}
+              activeTab={mobileTab === 'canvas' ? undefined : mobileTab}
+              onTabChange={(tab) => setMobileTab(tab)}
+              onCloseMobile={() => setMobileTab('canvas')}
+            />
+          </div>
         )}
       </div>
+
+      {/* Mobile Bottom Navigation Bar (md:hidden) for quick thumb-switching */}
+      {activeItem && (
+        <div className="md:hidden flex items-center justify-around border-t border-zinc-800 bg-zinc-950 py-1.5 px-2 shrink-0 z-20">
+          <button
+            onClick={() => setMobileTab('canvas')}
+            className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-lg text-[10px] font-semibold transition-colors ${
+              mobileTab === 'canvas'
+                ? 'text-indigo-400 bg-zinc-900 border border-indigo-500/30'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <Eye className="w-4 h-4" />
+            <span>Canvas</span>
+          </button>
+          <button
+            onClick={() => setMobileTab('brand')}
+            className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-lg text-[10px] font-semibold transition-colors ${
+              mobileTab === 'brand'
+                ? 'text-indigo-400 bg-zinc-900 border border-indigo-500/30'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>Watermarks</span>
+          </button>
+          <button
+            onClick={() => setMobileTab('edits')}
+            className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-lg text-[10px] font-semibold transition-colors ${
+              mobileTab === 'edits'
+                ? 'text-indigo-400 bg-zinc-900 border border-indigo-500/30'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <Sliders className="w-4 h-4" />
+            <span>Edits</span>
+          </button>
+          <button
+            onClick={() => setMobileTab('tags')}
+            className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-lg text-[10px] font-semibold transition-colors ${
+              mobileTab === 'tags'
+                ? 'text-indigo-400 bg-zinc-900 border border-indigo-500/30'
+                : 'text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <TagIcon className="w-4 h-4" />
+            <span>Tags</span>
+          </button>
+        </div>
+      )}
 
       {/* Bottom Media Tray Carousel */}
       <MediaTray
@@ -620,6 +693,7 @@ export default function App() {
         onSelectItem={(id) => {
           setActiveId(id);
           setSelectedOverlayId(null);
+          setMobileTab('canvas'); // Auto-switch to canvas to inspect newly selected media
         }}
         onDeleteItem={handleDeleteItem}
         onUploadFiles={handleFilesSelected}

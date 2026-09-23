@@ -37,6 +37,9 @@ interface MediaEditorSidebarProps {
   activeOverlays: WatermarkOverlay[];
   selectedOverlayId: string | null;
   onSelectOverlay: (id: string | null) => void;
+  activeTab?: 'brand' | 'edits' | 'tags';
+  onTabChange?: (tab: 'brand' | 'edits' | 'tags') => void;
+  onCloseMobile?: () => void;
 }
 
 export const MediaEditorSidebar: React.FC<MediaEditorSidebarProps> = ({
@@ -55,8 +58,16 @@ export const MediaEditorSidebar: React.FC<MediaEditorSidebarProps> = ({
   activeOverlays,
   selectedOverlayId,
   onSelectOverlay,
+  activeTab: propActiveTab,
+  onTabChange,
+  onCloseMobile,
 }) => {
-  const [activeTab, setActiveTab] = useState<'brand' | 'edits' | 'tags'>('brand');
+  const [internalTab, setInternalTab] = useState<'brand' | 'edits' | 'tags'>('brand');
+  const activeTab = propActiveTab || internalTab;
+  const setActiveTab = (tab: 'brand' | 'edits' | 'tags') => {
+    setInternalTab(tab);
+    if (onTabChange) onTabChange(tab);
+  };
   const [newTagInput, setNewTagInput] = useState('');
   const [copiedEditsNotice, setCopiedEditsNotice] = useState(false);
 
@@ -81,7 +92,22 @@ export const MediaEditorSidebar: React.FC<MediaEditorSidebarProps> = ({
   };
 
   return (
-    <aside className="w-80 md:w-96 border-l border-zinc-800 bg-zinc-950 flex flex-col shrink-0 h-full overflow-hidden select-none">
+    <aside className="w-full md:w-96 border-l border-zinc-800 bg-zinc-950 flex flex-col shrink-0 h-full overflow-hidden select-none">
+      {/* Mobile Top Bar */}
+      {onCloseMobile && (
+        <div className="md:hidden flex items-center justify-between px-4 py-2.5 bg-zinc-900 border-b border-zinc-800">
+          <span className="text-xs font-semibold text-zinc-200">
+            {activeTab === 'brand' ? 'Brand & Watermarks' : activeTab === 'edits' ? 'Filters & Crop' : 'Tags & Metadata'}
+          </span>
+          <button
+            onClick={onCloseMobile}
+            className="px-3 py-1 text-xs font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-500 cursor-pointer shadow"
+          >
+            ← View Full Canvas
+          </button>
+        </div>
+      )}
+
       {/* Tab Navigation */}
       <div className="p-3 border-b border-zinc-800 bg-zinc-900/50">
         <div className="grid grid-cols-3 gap-1 bg-zinc-950 p-1 rounded-lg border border-zinc-800/80">

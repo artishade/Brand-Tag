@@ -6,9 +6,22 @@ import { MediaItem, WatermarkOverlay } from '../types';
 export function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
+    // Only set crossOrigin for remote http/https URLs; setting it on blob:/data: causes Safari & Mobile WebKit to fail
+    if (src.startsWith('http://') || src.startsWith('https://')) {
+      img.crossOrigin = 'anonymous';
+    }
     img.onload = () => resolve(img);
-    img.onerror = (e) => reject(e);
+    img.onerror = () => {
+      // If it failed with crossOrigin, retry without crossOrigin
+      if (img.crossOrigin) {
+        const retryImg = new Image();
+        retryImg.onload = () => resolve(retryImg);
+        retryImg.onerror = (e) => reject(e);
+        retryImg.src = src;
+      } else {
+        reject(new Error(`Failed to load image: ${src.slice(0, 40)}...`));
+      }
+    };
     img.src = src;
   });
 }
