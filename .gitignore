@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Local helper scripts and screenshots (not part of the app)
+scripts/
+.zscripts/
+*.zscripts
+tool-results/

@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { Eye, Layers, Sliders, Tag as TagIcon } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { Eye, Layers, Sliders, Tag as TagIcon, Upload, ImagePlus, ShieldCheck, Sparkles } from 'lucide-react';
 import { Header } from './components/Header';
 import { MediaTray } from './components/MediaTray';
 import { InteractiveCanvas } from './components/InteractiveCanvas';
@@ -162,6 +162,104 @@ export default function App() {
     }
     setSelectedOverlayId(duplicated.id);
   };
+
+  // Global keyboard shortcuts for power users:
+  //   - Esc         : deselect current overlay (or close modals)
+  //   - Arrow keys  : nudge selected overlay by 1%
+  //   - Shift+Arrow : nudge by 5%
+  //   - [ / ]       : cycle prev/next media item
+  //   - Delete/Bksp : delete selected overlay
+  //   - D           : duplicate selected overlay
+  //   - Cmd/Ctrl+E  : open export modal
+  //   - Cmd/Ctrl+U  : open upload modal
+  //   - Cmd/Ctrl+I  : open AI inspector
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      // Don't interfere with form inputs
+      const target = e.target as HTMLElement;
+      const tag = target?.tagName?.toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || target?.isContentEditable) return;
+
+      // Modifier-based shortcuts
+      if (e.metaKey || e.ctrlKey) {
+        if (e.key.toLowerCase() === 'e') {
+          e.preventDefault();
+          setIsExportModalOpen(true);
+          return;
+        }
+        if (e.key.toLowerCase() === 'u') {
+          e.preventDefault();
+          setIsUploadModalOpen(true);
+          return;
+        }
+        if (e.key.toLowerCase() === 'i') {
+          e.preventDefault();
+          setIsAIInspectorOpen(true);
+          return;
+        }
+        return;
+      }
+
+      // Plain key shortcuts
+      if (e.key === 'Escape') {
+        if (selectedOverlayId) {
+          setSelectedOverlayId(null);
+        } else {
+          setIsExportModalOpen(false);
+          setIsUploadModalOpen(false);
+          setIsAIInspectorOpen(false);
+        }
+        return;
+      }
+
+      // Cycle media items
+      if (e.key === '[' || e.key === ']') {
+        if (items.length === 0) return;
+        const currentIndex = items.findIndex((i) => i.id === activeId);
+        if (currentIndex === -1) return;
+        const nextIndex =
+          e.key === '['
+            ? (currentIndex - 1 + items.length) % items.length
+            : (currentIndex + 1) % items.length;
+        setActiveId(items[nextIndex].id);
+        setSelectedOverlayId(null);
+        e.preventDefault();
+        return;
+      }
+
+      // Overlay-specific shortcuts
+      if (!selectedOverlayId) return;
+      const targetOverlay = activeOverlays.find((ov) => ov.id === selectedOverlayId);
+      if (!targetOverlay) return;
+
+      const step = e.shiftKey ? 5 : 1;
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        handleUpdateOverlay(selectedOverlayId, { x: Math.max(3, targetOverlay.x - step) });
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        handleUpdateOverlay(selectedOverlayId, { x: Math.min(97, targetOverlay.x + step) });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        handleUpdateOverlay(selectedOverlayId, { y: Math.max(3, targetOverlay.y - step) });
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        handleUpdateOverlay(selectedOverlayId, { y: Math.min(97, targetOverlay.y + step) });
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        handleDeleteOverlay(selectedOverlayId);
+      } else if (e.key.toLowerCase() === 'd' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        handleDuplicateOverlay(selectedOverlayId);
+      }
+    },
+    [selectedOverlayId, activeOverlays, items, activeId, handleUpdateOverlay, handleDeleteOverlay, handleDuplicateOverlay]
+  );
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
   // Add a new text watermark overlay
   const handleAddTextOverlay = () => {
@@ -559,7 +657,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-zinc-950 text-zinc-100 overflow-hidden font-sans">
+    <div className="flex flex-col h-[100dvh] w-screen bg-[#0a0a0c] text-zinc-100 overflow-hidden font-sans ui-chrome">
       {/* Top Header */}
       <Header
         mediaCount={items.length}
@@ -571,11 +669,11 @@ export default function App() {
       />
 
       {/* Main Studio Area */}
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="flex-1 flex overflow-hidden relative min-h-0">
         {/* Central Workspace: Interactive Canvas (full-width on mobile when on canvas tab) */}
         {activeItem ? (
           <div
-            className={`flex-1 flex overflow-hidden ${
+            className={`flex-1 flex overflow-hidden min-w-0 ${
               mobileTab !== 'canvas' ? 'hidden md:flex' : 'flex'
             }`}
           >
@@ -594,21 +692,16 @@ export default function App() {
             />
           </div>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center text-zinc-500 space-y-4">
-            <p className="text-sm">No media in queue.</p>
-            <button
-              onClick={() => setIsUploadModalOpen(true)}
-              className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-500 cursor-pointer"
-            >
-              Upload Pictures, Videos or ZIP
-            </button>
-          </div>
+          <EmptyStateHero
+            onUpload={() => setIsUploadModalOpen(true)}
+            onLoadSamples={handleLoadSamples}
+          />
         )}
 
-        {/* Right Editor Sidebar (full screen on mobile when settings tab chosen, docked on right on desktop) */}
+        {/* Right Editor Sidebar */}
         {activeItem && (
           <div
-            className={`h-full ${
+            className={`h-full min-h-0 ${
               mobileTab === 'canvas' ? 'hidden md:flex' : 'flex flex-1 md:flex-initial'
             }`}
           >
@@ -638,52 +731,34 @@ export default function App() {
 
       {/* Mobile Bottom Navigation Bar (md:hidden) for quick thumb-switching */}
       {activeItem && (
-        <div className="md:hidden flex items-center justify-around border-t border-zinc-800 bg-zinc-950 py-1.5 px-2 shrink-0 z-20">
-          <button
-            onClick={() => setMobileTab('canvas')}
-            className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-lg text-[10px] font-semibold transition-colors ${
-              mobileTab === 'canvas'
-                ? 'text-indigo-400 bg-zinc-900 border border-indigo-500/30'
-                : 'text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            <Eye className="w-4 h-4" />
-            <span>Canvas</span>
-          </button>
-          <button
-            onClick={() => setMobileTab('brand')}
-            className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-lg text-[10px] font-semibold transition-colors ${
-              mobileTab === 'brand'
-                ? 'text-indigo-400 bg-zinc-900 border border-indigo-500/30'
-                : 'text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            <Layers className="w-4 h-4" />
-            <span>Watermarks</span>
-          </button>
-          <button
-            onClick={() => setMobileTab('edits')}
-            className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-lg text-[10px] font-semibold transition-colors ${
-              mobileTab === 'edits'
-                ? 'text-indigo-400 bg-zinc-900 border border-indigo-500/30'
-                : 'text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            <Sliders className="w-4 h-4" />
-            <span>Edits</span>
-          </button>
-          <button
-            onClick={() => setMobileTab('tags')}
-            className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-lg text-[10px] font-semibold transition-colors ${
-              mobileTab === 'tags'
-                ? 'text-indigo-400 bg-zinc-900 border border-indigo-500/30'
-                : 'text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            <TagIcon className="w-4 h-4" />
-            <span>Tags</span>
-          </button>
-        </div>
+        <nav
+          aria-label="Studio sections"
+          className="md:hidden flex items-center justify-around border-t border-zinc-800/80 bg-zinc-950/95 backdrop-blur-md py-1.5 px-2 shrink-0 z-20 safe-bottom"
+        >
+          {[
+            { id: 'canvas' as const, icon: Eye, label: 'Canvas' },
+            { id: 'brand' as const, icon: Layers, label: 'Brand' },
+            { id: 'edits' as const, icon: Sliders, label: 'Edits' },
+            { id: 'tags' as const, icon: TagIcon, label: 'Tags' },
+          ].map(({ id, icon: Icon, label }) => {
+            const active = mobileTab === id;
+            return (
+              <button
+                key={id}
+                onClick={() => setMobileTab(id)}
+                aria-current={active ? 'page' : undefined}
+                className={`flex flex-col items-center gap-0.5 py-1.5 px-4 rounded-lg text-[10px] font-semibold transition-all ${
+                  active
+                    ? 'text-indigo-300 bg-indigo-500/10'
+                    : 'text-zinc-500 hover:text-zinc-300 active:scale-95'
+                }`}
+              >
+                <Icon className={`w-4 h-4 ${active ? 'scale-105' : ''}`} />
+                <span>{label}</span>
+              </button>
+            );
+          })}
+        </nav>
       )}
 
       {/* Bottom Media Tray Carousel */}
@@ -693,7 +768,7 @@ export default function App() {
         onSelectItem={(id) => {
           setActiveId(id);
           setSelectedOverlayId(null);
-          setMobileTab('canvas'); // Auto-switch to canvas to inspect newly selected media
+          setMobileTab('canvas');
         }}
         onDeleteItem={handleDeleteItem}
         onUploadFiles={handleFilesSelected}
@@ -728,3 +803,85 @@ export default function App() {
     </div>
   );
 }
+
+/* ============================================================
+   Empty State Hero — shown when no media is loaded
+   ============================================================ */
+interface EmptyStateHeroProps {
+  onUpload: () => void;
+  onLoadSamples: () => void;
+}
+
+const EmptyStateHero: React.FC<EmptyStateHeroProps> = ({ onUpload, onLoadSamples }) => {
+  return (
+    <div className="flex-1 flex items-center justify-center p-6 sm:p-10 overflow-auto">
+      <div className="max-w-xl w-full text-center animate-fade-in-up">
+        {/* Hero illustration: a stylized stack of media */}
+        <div className="relative mx-auto mb-8 w-40 h-40 sm:w-48 sm:h-48">
+          <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-indigo-500/10 to-fuchsia-500/10 blur-2xl" />
+          <div className="absolute inset-4 sm:inset-6 rounded-2xl bg-gradient-to-br from-zinc-800/80 to-zinc-900/90 border border-zinc-700/50 flex items-center justify-center shadow-2xl">
+            <div className="w-full h-full rounded-2xl bg-[radial-gradient(circle_at_30%_30%,rgba(99,102,241,0.18),transparent_50%)] flex items-center justify-center">
+              <Sparkles className="w-12 h-12 sm:w-14 sm:h-14 text-indigo-400" strokeWidth={1.5} />
+            </div>
+          </div>
+          {/* Floating accent badges */}
+          <div className="absolute -top-1 -right-1 px-2 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-semibold flex items-center gap-1 backdrop-blur shadow-lg">
+            <ShieldCheck className="w-3 h-3" />
+            <span>AI-Safe</span>
+          </div>
+          <div className="absolute -bottom-1 -left-1 px-2 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-200 text-[10px] font-semibold flex items-center gap-1 backdrop-blur shadow-lg">
+            <Layers className="w-3 h-3" />
+            <span>Multi-Brand</span>
+          </div>
+        </div>
+
+        <h2 className="text-xl sm:text-2xl font-bold text-zinc-100 tracking-tight">
+          Welcome to BrandStudio
+        </h2>
+        <p className="mt-2 text-sm text-zinc-400 leading-relaxed max-w-md mx-auto">
+          Drop your photos and videos to instantly watermark them with your brand
+          and automatically purge AI-generated fingerprints. Supports ZIP archives
+          and batch exports.
+        </p>
+
+        <div className="mt-7 flex flex-col sm:flex-row items-center justify-center gap-2.5">
+          <button
+            onClick={onUpload}
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] transition-all"
+          >
+            <Upload className="w-4 h-4" />
+            <span>Upload Media</span>
+            <kbd className="hidden sm:inline ml-2 px-1.5 py-0.5 rounded bg-indigo-700/50 text-[10px] font-mono">⌘U</kbd>
+          </button>
+          <button
+            onClick={onLoadSamples}
+            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] transition-all"
+          >
+            <ImagePlus className="w-4 h-4" />
+            <span>Try with Samples</span>
+          </button>
+        </div>
+
+        {/* Feature pills */}
+        <div className="mt-8 grid grid-cols-3 gap-2 max-w-md mx-auto">
+          {[
+            { label: 'AI Fingerprint Purge', icon: ShieldCheck },
+            { label: 'Multi-Logo & Text', icon: Layers },
+            { label: 'Batch ZIP Export', icon: Sparkles },
+          ].map((feat) => {
+            const Icon = feat.icon;
+            return (
+              <div
+                key={feat.label}
+                className="p-2.5 rounded-lg bg-zinc-900/60 border border-zinc-800/80 flex flex-col items-center gap-1 text-[10px] text-zinc-400"
+              >
+                <Icon className="w-3.5 h-3.5 text-zinc-300" />
+                <span className="text-center leading-tight">{feat.label}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};

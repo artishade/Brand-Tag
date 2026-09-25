@@ -1,5 +1,16 @@
 import React, { useRef, useEffect } from 'react';
-import { Upload, Film, Image as ImageIcon, ShieldCheck, Layers, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import {
+  Upload,
+  Film,
+  Image as ImageIcon,
+  ShieldCheck,
+  Layers,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+  Check,
+  X,
+} from 'lucide-react';
 import { MediaItem } from '../types';
 
 interface MediaTrayProps {
@@ -49,35 +60,39 @@ export const MediaTray: React.FC<MediaTrayProps> = ({
 
   const scrollLeft = () => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: -240, behavior: 'smooth' });
+      scrollContainerRef.current.scrollBy({ left: -280, behavior: 'smooth' });
     }
   };
 
   const scrollRight = () => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollBy({ left: 240, behavior: 'smooth' });
+      scrollContainerRef.current.scrollBy({ left: 280, behavior: 'smooth' });
     }
   };
 
   return (
-    <div className="h-32 sm:h-34 border-t border-zinc-800 bg-zinc-950/95 px-3 sm:px-4 py-2 flex flex-col justify-between shrink-0 select-none z-20">
-      {/* Top Filter and Info Bar */}
-      <div className="flex items-center justify-between gap-2 overflow-x-auto pb-1 text-xs">
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className="text-zinc-400 font-medium text-[11px] mr-1 flex items-center gap-1">
-            <span>Queue:</span>
-            <span className="text-indigo-400 font-bold font-mono">({items.length})</span>
+    <div className="border-t border-zinc-800/80 bg-[#0a0a0c]/95 backdrop-blur-md px-3 sm:px-4 pt-2 pb-2.5 flex flex-col shrink-0 select-none z-20">
+      {/* Top: Filter chips + scroll arrows */}
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hidden text-xs min-w-0">
+          <span className="text-zinc-500 font-medium text-[11px] mr-1 shrink-0 flex items-center gap-1">
+            <span>Queue</span>
+            <span className="text-indigo-400 font-bold font-mono px-1.5 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20">
+              {items.length}
+            </span>
           </span>
 
           <button
             onClick={() => onSelectTagFilter(null)}
-            className={`px-2 py-0.5 text-[11px] rounded-md font-medium transition-colors cursor-pointer ${
+            className={`px-2.5 py-1 text-[11px] rounded-full font-medium transition-all cursor-pointer shrink-0 flex items-center gap-1 ${
               selectedTagFilter === null
-                ? 'bg-zinc-800 text-white shadow-sm border border-zinc-700'
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
+                ? 'bg-zinc-100 text-zinc-900 shadow-sm'
+                : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
             }`}
+            aria-pressed={selectedTagFilter === null}
           >
-            All ({items.length})
+            All
+            {selectedTagFilter === null && <Check className="w-3 h-3" />}
           </button>
 
           {allTags.map((tag) => {
@@ -87,44 +102,46 @@ export const MediaTray: React.FC<MediaTrayProps> = ({
               <button
                 key={tag}
                 onClick={() => onSelectTagFilter(isSelected ? null : tag)}
-                className={`px-2 py-0.5 text-[11px] rounded-md font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                aria-pressed={isSelected}
+                className={`px-2.5 py-1 text-[11px] rounded-full font-medium transition-all cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-1 ${
                   isSelected
-                    ? 'bg-indigo-600/90 text-white shadow-sm border border-indigo-500'
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 border border-zinc-800/80'
+                    ? 'bg-indigo-500 text-white shadow-sm shadow-indigo-500/30'
+                    : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
                 }`}
               >
-                {tag} <span className="text-zinc-500 ml-0.5 text-[10px]">({count})</span>
+                <span>{tag}</span>
+                <span className={`text-[10px] ${isSelected ? 'text-indigo-100' : 'text-zinc-500'}`}>
+                  {count}
+                </span>
+                {isSelected && <X className="w-2.5 h-2.5 ml-0.5" />}
               </button>
             );
           })}
         </div>
 
-        {/* Carousel Scroll Arrows */}
-        <div className="flex items-center gap-1 text-zinc-400">
+        {/* Scroll arrows */}
+        <div className="flex items-center gap-1 text-zinc-400 shrink-0">
           <button
             onClick={scrollLeft}
-            className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 cursor-pointer"
-            title="Scroll Left"
+            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 cursor-pointer active:scale-95 transition-all"
+            aria-label="Scroll media queue left"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
           </button>
           <button
             onClick={scrollRight}
-            className="p-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 cursor-pointer"
-            title="Scroll Right"
+            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 cursor-pointer active:scale-95 transition-all"
+            aria-label="Scroll media queue right"
           >
             <ChevronRight className="w-3.5 h-3.5" />
           </button>
-          <span className="text-[10px] text-zinc-500 font-mono hidden md:inline ml-1">
-            Tap thumbnail to switch
-          </span>
         </div>
       </div>
 
-      {/* Media Thumbnails Carousel */}
+      {/* Media thumbnails carousel */}
       <div
         ref={scrollContainerRef}
-        className="w-full min-w-0 flex items-center gap-2.5 overflow-x-auto py-1 touch-pan-x scrollbar-thin scroll-smooth"
+        className="w-full min-w-0 flex items-center gap-2.5 overflow-x-auto py-1 touch-pan-x scrollbar-hidden scroll-smooth"
       >
         <input
           ref={fileInputRef}
@@ -135,19 +152,20 @@ export const MediaTray: React.FC<MediaTrayProps> = ({
           className="hidden"
         />
 
-        {/* Upload Trigger Tile */}
+        {/* Upload trigger tile */}
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="w-20 h-16 sm:h-18 rounded-lg border-2 border-dashed border-zinc-800 hover:border-indigo-500/70 bg-zinc-900/50 hover:bg-zinc-900 flex flex-col items-center justify-center gap-1 text-zinc-400 hover:text-indigo-400 transition-all shrink-0 cursor-pointer group"
+          className="w-[88px] h-[68px] sm:w-24 sm:h-20 rounded-xl border-2 border-dashed border-zinc-800 hover:border-indigo-500/60 hover:bg-indigo-500/[0.04] bg-zinc-900/40 flex flex-col items-center justify-center gap-1 text-zinc-400 hover:text-indigo-300 transition-all shrink-0 cursor-pointer group active:scale-95"
           title="Upload multiple images, videos, or a .zip archive"
+          aria-label="Upload media files"
         >
           <Upload className="w-4 h-4 group-hover:-translate-y-0.5 transition-transform" />
-          <span className="text-[10px] font-semibold text-center leading-tight">+ Upload</span>
+          <span className="text-[10px] font-semibold">Upload</span>
         </button>
 
         {filteredItems.length === 0 ? (
-          <div className="flex items-center justify-center text-xs text-zinc-500 pl-3">
-            No media matching current filter.
+          <div className="flex items-center justify-center text-xs text-zinc-500 pl-3 italic">
+            No media matches the selected tag.
           </div>
         ) : (
           filteredItems.map((item, idx) => {
@@ -157,13 +175,21 @@ export const MediaTray: React.FC<MediaTrayProps> = ({
                 key={item.id}
                 data-media-id={item.id}
                 onClick={() => onSelectItem(item.id)}
-                className={`group relative w-24 h-16 sm:h-18 rounded-lg overflow-hidden shrink-0 border cursor-pointer transition-all ${
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelectItem(item.id);
+                  }
+                }}
+                className={`group relative w-[120px] h-[68px] sm:w-32 sm:h-20 rounded-xl overflow-hidden shrink-0 border cursor-pointer transition-all active:scale-95 ${
                   isActive
-                    ? 'border-indigo-500 ring-2 ring-indigo-500/40 bg-zinc-900 scale-[1.02]'
-                    : 'border-zinc-800 hover:border-zinc-700 bg-zinc-900/60'
+                    ? 'border-indigo-500 ring-2 ring-indigo-500/40 ring-offset-2 ring-offset-[#0a0a0c] shadow-lg shadow-indigo-500/10'
+                    : 'border-zinc-800 hover:border-zinc-600 hover:ring-1 hover:ring-zinc-700'
                 }`}
               >
-                {/* Media Image / Video Thumbnail */}
+                {/* Media thumbnail */}
                 {item.type === 'video' ? (
                   <div className="w-full h-full bg-zinc-900 flex items-center justify-center relative">
                     <video
@@ -171,55 +197,70 @@ export const MediaTray: React.FC<MediaTrayProps> = ({
                       className="w-full h-full object-cover"
                       muted
                       playsInline
+                      preload="metadata"
                     />
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                      <Film className="w-4 h-4 text-zinc-200" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20" />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="w-7 h-7 rounded-full bg-white/15 backdrop-blur-sm border border-white/30 flex items-center justify-center">
+                        <Film className="w-3.5 h-3.5 text-white" />
+                      </div>
                     </div>
                   </div>
                 ) : (
                   <img
                     src={item.cleanedUrl || item.url}
                     alt={item.name}
+                    loading="lazy"
                     className="w-full h-full object-cover"
                   />
                 )}
 
-                {/* Index & AI Clean Badge */}
-                <div className="absolute top-1 left-1 flex items-center gap-0.5">
-                  <span className="bg-zinc-950/80 text-zinc-300 text-[9px] font-mono font-bold px-1 rounded">
+                {/* Top badges */}
+                <div className="absolute top-1.5 left-1.5 flex items-center gap-1">
+                  <span className="bg-black/70 backdrop-blur-sm text-white text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-md">
                     {idx + 1}
                   </span>
-                  <div
-                    className="bg-zinc-950/80 rounded p-0.5 text-emerald-400"
-                    title="AI metadata stripped & SynthID disrupted"
-                  >
-                    <ShieldCheck className="w-2.5 h-2.5" />
-                  </div>
                 </div>
 
-                {/* Custom Overlay Indicator */}
+                {/* AI cleaned indicator (top-right) */}
+                <div
+                  className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-emerald-500/90 backdrop-blur-sm flex items-center justify-center shadow-sm ring-1 ring-emerald-300/30"
+                  title="AI metadata stripped & SynthID disrupted"
+                >
+                  <ShieldCheck className="w-2.5 h-2.5 text-white" strokeWidth={2.5} />
+                </div>
+
+                {/* Custom overlay indicator */}
                 {item.hasCustomOverlays && (
                   <div
-                    className="absolute top-1 right-6 bg-indigo-950/80 rounded p-0.5 text-indigo-300"
+                    className="absolute top-7 right-1.5 w-4 h-4 rounded-full bg-indigo-500/90 backdrop-blur-sm flex items-center justify-center shadow-sm ring-1 ring-indigo-300/30"
                     title="Custom watermark active on this media"
                   >
-                    <Layers className="w-2.5 h-2.5" />
+                    <Layers className="w-2.5 h-2.5 text-white" strokeWidth={2.5} />
                   </div>
                 )}
 
-                {/* Delete button (accessible on mobile and desktop) */}
+                {/* Delete button */}
                 <button
                   onClick={(e) => onDeleteItem(item.id, e)}
-                  className="absolute top-1 right-1 w-4.5 h-4.5 rounded bg-zinc-950/80 hover:bg-red-700 text-zinc-400 hover:text-white flex items-center justify-center opacity-70 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity cursor-pointer z-10"
+                  className="absolute bottom-1.5 right-1.5 w-5 h-5 rounded-md bg-black/70 backdrop-blur-sm hover:bg-red-600 text-white/80 hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer z-10 active:scale-90"
                   title="Remove from queue"
+                  aria-label={`Remove ${item.name} from queue`}
                 >
                   <Trash2 className="w-2.5 h-2.5" />
                 </button>
 
-                {/* File Name Bar */}
-                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-zinc-950/95 to-transparent px-1.5 py-0.5">
-                  <p className="text-[9px] text-zinc-200 truncate font-mono">{item.name}</p>
+                {/* Filename bar */}
+                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/95 via-black/70 to-transparent px-2 pt-3 pb-1">
+                  <p className="text-[9px] text-zinc-200 truncate font-mono leading-tight">
+                    {item.name}
+                  </p>
                 </div>
+
+                {/* Active indicator line */}
+                {isActive && (
+                  <div className="absolute bottom-0 inset-x-0 h-0.5 bg-indigo-500" />
+                )}
               </div>
             );
           })
