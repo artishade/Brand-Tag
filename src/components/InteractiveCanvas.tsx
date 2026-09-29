@@ -69,6 +69,8 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // Interaction state — using a ref-based pointer model for fluid, multi-mode drag
   const [interactionMode, setInteractionMode] = useState<'move' | 'scale' | 'rotate' | null>(null);
   const activeOverlayRef = useRef<string | null>(null);
+  // Timestamp of the last drag end — prevents the click after a drag from deselecting
+  const lastInteractEndRef = useRef(0);
 
   const interactionStartRef = useRef<{
     startX: number;
@@ -147,6 +149,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     onSelectOverlay(overlay.id);
     activeOverlayRef.current = overlay.id;
     setInteractionMode('move');
+    lastInteractEndRef.current = 0;
 
     const { x: clientX, y: clientY } = getPointerCoords(e);
     interactionStartRef.current = {
@@ -168,6 +171,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     e.preventDefault();
     activeOverlayRef.current = overlay.id;
     setInteractionMode('scale');
+    lastInteractEndRef.current = 0;
 
     const { x: clientX, y: clientY } = getPointerCoords(e);
     const elem = overlayElementsRef.current[overlay.id];
@@ -195,6 +199,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     e.preventDefault();
     activeOverlayRef.current = overlay.id;
     setInteractionMode('rotate');
+    lastInteractEndRef.current = 0;
 
     const { x: clientX, y: clientY } = getPointerCoords(e);
     const elem = overlayElementsRef.current[overlay.id];
@@ -239,8 +244,9 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         const deltaPercentX = (deltaX / mediaRect.width) * 100;
         const deltaPercentY = (deltaY / mediaRect.height) * 100;
 
-        const newX = Math.max(3, Math.min(97, interactionStartRef.current.initOverlayX + deltaPercentX));
-        const newY = Math.max(3, Math.min(97, interactionStartRef.current.initOverlayY + deltaPercentY));
+        // Full 0–100% range: overlays can be placed anywhere, edge to edge
+        const newX = Math.max(0, Math.min(100, interactionStartRef.current.initOverlayX + deltaPercentX));
+        const newY = Math.max(0, Math.min(100, interactionStartRef.current.initOverlayY + deltaPercentY));
 
         onUpdateOverlay(overlayId, {
           x: Math.round(newX * 10) / 10,
@@ -273,6 +279,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     };
 
     const onPointerEnd = () => {
+      lastInteractEndRef.current = Date.now();
       setInteractionMode(null);
       activeOverlayRef.current = null;
       interactionStartRef.current = null;
@@ -295,13 +302,13 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     };
   }, [interactionMode, onUpdateOverlay]);
 
-  // Nudge position (D-Pad)
+  // Nudge position (D-Pad) — full 0–100% range
   const nudgeOverlay = (dx: number, dy: number) => {
     if (!selectedOverlayId) return;
     const target = overlays.find((ov) => ov.id === selectedOverlayId);
     if (!target) return;
-    const newX = Math.max(3, Math.min(97, Math.round((target.x + dx) * 10) / 10));
-    const newY = Math.max(3, Math.min(97, Math.round((target.y + dy) * 10) / 10));
+    const newX = Math.max(0, Math.min(100, Math.round((target.x + dx) * 10) / 10));
+    const newY = Math.max(0, Math.min(100, Math.round((target.y + dy) * 10) / 10));
     onUpdateOverlay(selectedOverlayId, { x: newX, y: newY });
   };
 
@@ -317,12 +324,12 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   // Quick snap positions
   const snapTo = (overlayId: string, position: 'tl' | 'tr' | 'center' | 'bl' | 'br' | 'bc') => {
     const coords: Record<string, { x: number; y: number }> = {
-      tl: { x: 15, y: 12 },
-      tr: { x: 85, y: 12 },
+      tl: { x: 10, y: 8 },
+      tr: { x: 90, y: 8 },
       center: { x: 50, y: 50 },
-      bl: { x: 15, y: 88 },
-      br: { x: 85, y: 88 },
-      bc: { x: 50, y: 90 },
+      bl: { x: 10, y: 92 },
+      br: { x: 90, y: 92 },
+      bc: { x: 50, y: 93 },
     };
     if (coords[position]) {
       onUpdateOverlay(overlayId, coords[position]);
@@ -343,10 +350,19 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     ? 'none'
     : `rotate(${edits.rotation}deg) scaleX(${edits.flipH ? -1 : 1}) scaleY(${edits.flipV ? -1 : 1})`;
 
+  // Clicking empty canvas deselects — but NOT when the click lands on an overlay
+  // or immediately after finishing a drag (which would kill move/scale/rotate).
+  const handleStageClick = (e: React.MouseEvent) => {
+    if (Date.now() - lastInteractEndRef.current < 250) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('[data-overlay-id]')) return;
+    onSelectOverlay(null);
+  };
+
   return (
     <div
       ref={containerRef}
-      onClick={() => onSelectOverlay(null)}
+      onClick={handleStageClick}
       className="relative flex-1 bg-[#0a0a0c] flex flex-col items-center justify-center p-2 sm:p-6 overflow-hidden select-none touch-none"
       style={{
         backgroundImage: `
@@ -504,6 +520,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               return (
                 <div
                   key={overlay.id}
+                  data-overlay-id={overlay.id}
                   ref={(el) => {
                     overlayElementsRef.current[overlay.id] = el;
                   }}
@@ -744,7 +761,10 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
       {/* Video Control Bar */}
       {item.type === 'video' && (
-        <div className="absolute bottom-4 inset-x-4 sm:inset-x-8 max-w-xl mx-auto glass-panel rounded-xl px-3 py-2 sm:px-4 flex items-center gap-2 sm:gap-3 z-20 shadow-2xl">
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute bottom-4 inset-x-4 sm:inset-x-8 max-w-xl mx-auto glass-panel rounded-xl px-3 py-2 sm:px-4 flex items-center gap-2 sm:gap-3 z-20 shadow-2xl"
+        >
           <button
             onClick={togglePlay}
             className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer transition-colors shrink-0 active:scale-90"

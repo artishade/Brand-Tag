@@ -3,15 +3,24 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
-import { Eye, Layers, Sliders, Tag as TagIcon, Upload, ImagePlus, ShieldCheck, Sparkles } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import {
+  Eye,
+  Layers,
+  Sliders,
+  Tag as TagIcon,
+  Upload,
+  ImagePlus,
+  CloudUpload,
+  Sparkles,
+  Loader2,
+} from 'lucide-react';
 import { Header } from './components/Header';
 import { MediaTray } from './components/MediaTray';
 import { InteractiveCanvas } from './components/InteractiveCanvas';
 import { MediaEditorSidebar } from './components/MediaEditorSidebar';
 import { AIFingerprintInspector } from './components/AIFingerprintInspector';
 import { BatchExportModal } from './components/BatchExportModal';
-import { UploadModal } from './components/UploadModal';
 import {
   MediaItem,
   WatermarkOverlay,
@@ -28,20 +37,9 @@ import { unpackZipArchive } from './utils/zipHandler';
 import { renderCompositedCanvas } from './utils/canvasRenderer';
 
 export default function App() {
-  // Media items list
-  const [items, setItems] = useState<MediaItem[]>(() => {
-    // Initialize with high quality sample items so the app is immediately alive and interactive
-    return SAMPLE_MEDIA_LIST.map((sample) => ({
-      ...sample,
-      tags: [...sample.tags],
-      edits: { ...sample.edits },
-    }));
-  });
-
-  // Currently selected media item ID
-  const [activeId, setActiveId] = useState<string | null>(() => {
-    return SAMPLE_MEDIA_LIST[0]?.id || null;
-  });
+  // Media items list — starts empty; user brings their own files (or loads samples)
+  const [items, setItems] = useState<MediaItem[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
 
   // Mobile navigation tab: 'canvas' | 'brand' | 'edits' | 'tags'
   const [mobileTab, setMobileTab] = useState<'canvas' | 'brand' | 'edits' | 'tags'>('canvas');
@@ -56,14 +54,24 @@ export default function App() {
   const [selectedTagFilter, setSelectedTagFilter] = useState<string | null>(null);
 
   // Modals state
-  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isAIInspectorOpen, setIsAIInspectorOpen] = useState(false);
 
-  // Upload processing state
+  // Upload processing state (shown as a slim toast, not a blocking modal)
   const [isProcessingUpload, setIsProcessingUpload] = useState(false);
   const [uploadProgressText, setUploadProgressText] = useState('');
   const [uploadProgressPercent, setUploadProgressPercent] = useState(0);
+
+  // Full-screen drag & drop state
+  const [isDragActive, setIsDragActive] = useState(false);
+
+  // One-click file picker (no modal needed)
+  const filePickerRef = useRef<HTMLInputElement>(null);
+  const isProcessingRef = useRef(false);
+
+  useEffect(() => {
+    isProcessingRef.current = isProcessingUpload;
+  }, [isProcessingUpload]);
 
   // Active item
   const activeItem = useMemo(() => {
@@ -163,6 +171,18 @@ export default function App() {
     setSelectedOverlayId(duplicated.id);
   };
 
+  // One-click add: opens the OS file picker directly, no modal step
+  const openFilePicker = useCallback(() => {
+    filePickerRef.current?.click();
+  }, []);
+
+  const handlePickerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      handleFilesSelected(e.target.files);
+    }
+    e.target.value = '';
+  };
+
   // Global keyboard shortcuts for power users:
   //   - Esc         : deselect current overlay (or close modals)
   //   - Arrow keys  : nudge selected overlay by 1%
@@ -171,7 +191,7 @@ export default function App() {
   //   - Delete/Bksp : delete selected overlay
   //   - D           : duplicate selected overlay
   //   - Cmd/Ctrl+E  : open export modal
-  //   - Cmd/Ctrl+U  : open upload modal
+  //   - Cmd/Ctrl+U  : open file picker
   //   - Cmd/Ctrl+I  : open AI inspector
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -189,7 +209,7 @@ export default function App() {
         }
         if (e.key.toLowerCase() === 'u') {
           e.preventDefault();
-          setIsUploadModalOpen(true);
+          openFilePicker();
           return;
         }
         if (e.key.toLowerCase() === 'i') {
@@ -206,7 +226,6 @@ export default function App() {
           setSelectedOverlayId(null);
         } else {
           setIsExportModalOpen(false);
-          setIsUploadModalOpen(false);
           setIsAIInspectorOpen(false);
         }
         return;
@@ -235,16 +254,16 @@ export default function App() {
       const step = e.shiftKey ? 5 : 1;
       if (e.key === 'ArrowLeft') {
         e.preventDefault();
-        handleUpdateOverlay(selectedOverlayId, { x: Math.max(3, targetOverlay.x - step) });
+        handleUpdateOverlay(selectedOverlayId, { x: Math.max(0, targetOverlay.x - step) });
       } else if (e.key === 'ArrowRight') {
         e.preventDefault();
-        handleUpdateOverlay(selectedOverlayId, { x: Math.min(97, targetOverlay.x + step) });
+        handleUpdateOverlay(selectedOverlayId, { x: Math.min(100, targetOverlay.x + step) });
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        handleUpdateOverlay(selectedOverlayId, { y: Math.max(3, targetOverlay.y - step) });
+        handleUpdateOverlay(selectedOverlayId, { y: Math.max(0, targetOverlay.y - step) });
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
-        handleUpdateOverlay(selectedOverlayId, { y: Math.min(97, targetOverlay.y + step) });
+        handleUpdateOverlay(selectedOverlayId, { y: Math.min(100, targetOverlay.y + step) });
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
         e.preventDefault();
         handleDeleteOverlay(selectedOverlayId);
@@ -253,7 +272,8 @@ export default function App() {
         handleDuplicateOverlay(selectedOverlayId);
       }
     },
-    [selectedOverlayId, activeOverlays, items, activeId, handleUpdateOverlay, handleDeleteOverlay, handleDuplicateOverlay]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedOverlayId, activeOverlays, items, activeId, openFilePicker]
   );
 
   useEffect(() => {
@@ -548,15 +568,18 @@ export default function App() {
     }
   };
 
-  // Upload handler: Processes single/multiple files or .zip files
+  // Upload handler: Processes single/multiple files or .zip files.
+  // No modal — progress is shown as a slim toast while the user keeps working.
   const handleFilesSelected = async (fileList: FileList | File[]) => {
+    if (isProcessingRef.current) return;
+
     const rawFiles = Array.from(fileList);
     if (rawFiles.length === 0) return;
 
-    setIsUploadModalOpen(true);
     setIsProcessingUpload(true);
+    isProcessingRef.current = true;
     setUploadProgressPercent(0);
-    setUploadProgressText('Inspecting uploaded archives & files...');
+    setUploadProgressText('Inspecting uploaded files...');
 
     const filesToClean: File[] = [];
 
@@ -580,7 +603,7 @@ export default function App() {
 
     if (filesToClean.length === 0) {
       setIsProcessingUpload(false);
-      setIsUploadModalOpen(false);
+      isProcessingRef.current = false;
       return;
     }
 
@@ -588,7 +611,7 @@ export default function App() {
     let completedCount = 0;
 
     for (const file of filesToClean) {
-      setUploadProgressText(`Purging AI metadata & neutralizing SynthID: ${file.name}...`);
+      setUploadProgressText(`Purging AI metadata: ${file.name}...`);
       try {
         const cleanResult = await cleanMediaFile(file);
         const isVideo = file.type.startsWith('video/') || file.name.match(/\.(mp4|webm|mov)$/i);
@@ -635,12 +658,69 @@ export default function App() {
       setMobileTab('canvas'); // Take user directly to interactive canvas preview
     }
 
-    setUploadProgressText('Purification Complete! Adding to Studio...');
+    setUploadProgressText('Done! Files added to Studio.');
+    setUploadProgressPercent(100);
     setTimeout(() => {
       setIsProcessingUpload(false);
-      setIsUploadModalOpen(false);
-    }, 600);
+      isProcessingRef.current = false;
+    }, 700);
   };
+
+  // Keep a stable ref to the latest handler for the window drag listeners
+  const handleFilesRef = useRef(handleFilesSelected);
+  useEffect(() => {
+    handleFilesRef.current = handleFilesSelected;
+  });
+
+  // -------------------------------------------------------------
+  // Full-screen Drag & Drop — drop files ANYWHERE on the screen
+  // -------------------------------------------------------------
+  useEffect(() => {
+    const hasFiles = (e: DragEvent) =>
+      Array.from(e.dataTransfer?.types || []).includes('Files');
+
+    let depth = 0;
+
+    const onDragEnter = (e: DragEvent) => {
+      if (!hasFiles(e) || isProcessingRef.current) return;
+      e.preventDefault();
+      depth++;
+      setIsDragActive(true);
+    };
+
+    const onDragOver = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault(); // Required to allow dropping anywhere
+    };
+
+    const onDragLeave = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      depth = Math.max(0, depth - 1);
+      if (depth === 0) setIsDragActive(false);
+    };
+
+    const onDrop = (e: DragEvent) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      depth = 0;
+      setIsDragActive(false);
+      if (isProcessingRef.current) return;
+      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+        handleFilesRef.current(e.dataTransfer.files);
+      }
+    };
+
+    window.addEventListener('dragenter', onDragEnter);
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('dragleave', onDragLeave);
+    window.addEventListener('drop', onDrop);
+    return () => {
+      window.removeEventListener('dragenter', onDragEnter);
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('dragleave', onDragLeave);
+      window.removeEventListener('drop', onDrop);
+    };
+  }, []);
 
   // Load demo samples
   const handleLoadSamples = () => {
@@ -658,14 +738,24 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-[100dvh] w-screen bg-[#0a0a0c] text-zinc-100 overflow-hidden font-sans ui-chrome">
+      {/* Hidden one-click file picker (opened from Header, Empty State, ⌘U) */}
+      <input
+        ref={filePickerRef}
+        type="file"
+        multiple
+        accept="image/*,video/*,.zip"
+        onChange={handlePickerChange}
+        className="hidden"
+        aria-hidden="true"
+        tabIndex={-1}
+      />
+
       {/* Top Header */}
       <Header
         mediaCount={items.length}
         activeItem={activeItem || undefined}
-        onOpenUpload={() => setIsUploadModalOpen(true)}
+        onAddMedia={openFilePicker}
         onOpenExport={() => setIsExportModalOpen(true)}
-        onOpenAIInspector={() => setIsAIInspectorOpen(true)}
-        onLoadSamples={handleLoadSamples}
       />
 
       {/* Main Studio Area */}
@@ -693,8 +783,9 @@ export default function App() {
           </div>
         ) : (
           <EmptyStateHero
-            onUpload={() => setIsUploadModalOpen(true)}
+            onUpload={openFilePicker}
             onLoadSamples={handleLoadSamples}
+            isDragActive={isDragActive}
           />
         )}
 
@@ -777,17 +868,46 @@ export default function App() {
         allTags={allTags}
       />
 
-      {/* Modals */}
-      <UploadModal
-        isOpen={isUploadModalOpen}
-        onClose={() => setIsUploadModalOpen(false)}
-        onFilesSelected={handleFilesSelected}
-        onLoadSamples={handleLoadSamples}
-        isProcessing={isProcessingUpload}
-        progressText={uploadProgressText}
-        progressPercent={uploadProgressPercent}
-      />
+      {/* Upload progress toast — non-blocking */}
+      {isProcessingUpload && (
+        <div className="fixed top-16 sm:top-20 left-1/2 -translate-x-1/2 z-[90] w-[calc(100%-2rem)] max-w-sm glass-panel rounded-2xl px-4 py-3 shadow-2xl animate-fade-in-down">
+          <div className="flex items-center gap-3">
+            <Loader2 className="w-5 h-5 text-indigo-400 animate-spin shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-zinc-100 truncate">{uploadProgressText}</p>
+              <div className="mt-1.5 h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-indigo-500 to-emerald-400 transition-all duration-300"
+                  style={{ width: `${uploadProgressPercent}%` }}
+                />
+              </div>
+            </div>
+            <span className="text-[11px] font-mono text-zinc-400 shrink-0 tabular-nums">
+              {uploadProgressPercent}%
+            </span>
+          </div>
+        </div>
+      )}
 
+      {/* Full-screen drop zone — drop files anywhere on the screen */}
+      {isDragActive && (
+        <div className="fixed inset-0 z-[100] pointer-events-none animate-fade-in">
+          <div className="absolute inset-0 bg-indigo-950/60 modal-backdrop" />
+          <div className="absolute inset-3 sm:inset-6 rounded-3xl border-[3px] border-dashed border-indigo-400/80 bg-indigo-500/10 flex flex-col items-center justify-center gap-3">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-indigo-500/25 border border-indigo-400/50 flex items-center justify-center shadow-2xl">
+              <CloudUpload className="w-8 h-8 sm:w-10 sm:h-10 text-indigo-200" />
+            </div>
+            <p className="text-base sm:text-xl font-bold text-white tracking-tight">
+              Drop files to upload
+            </p>
+            <p className="text-xs sm:text-sm text-indigo-200/80">
+              Images, videos &amp; ZIP archives — release anywhere on this screen
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Modals */}
       <BatchExportModal
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
@@ -810,38 +930,42 @@ export default function App() {
 interface EmptyStateHeroProps {
   onUpload: () => void;
   onLoadSamples: () => void;
+  isDragActive: boolean;
 }
 
-const EmptyStateHero: React.FC<EmptyStateHeroProps> = ({ onUpload, onLoadSamples }) => {
+const EmptyStateHero: React.FC<EmptyStateHeroProps> = ({ onUpload, onLoadSamples, isDragActive }) => {
   return (
     <div className="flex-1 flex items-center justify-center p-6 sm:p-10 overflow-auto">
-      <div className="max-w-xl w-full text-center animate-fade-in-up">
-        {/* Hero illustration: a stylized stack of media */}
-        <div className="relative mx-auto mb-8 w-40 h-40 sm:w-48 sm:h-48">
+      <div className="max-w-lg w-full text-center animate-fade-in-up">
+        {/* Drop target visual */}
+        <div
+          className={`relative mx-auto mb-7 w-36 h-36 sm:w-44 sm:h-44 rounded-3xl border-2 border-dashed flex items-center justify-center transition-all duration-200 ${
+            isDragActive
+              ? 'border-indigo-400 bg-indigo-500/15 scale-105'
+              : 'border-zinc-700/80 bg-zinc-900/40'
+          }`}
+        >
           <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-indigo-500/10 to-fuchsia-500/10 blur-2xl" />
-          <div className="absolute inset-4 sm:inset-6 rounded-2xl bg-gradient-to-br from-zinc-800/80 to-zinc-900/90 border border-zinc-700/50 flex items-center justify-center shadow-2xl">
-            <div className="w-full h-full rounded-2xl bg-[radial-gradient(circle_at_30%_30%,rgba(99,102,241,0.18),transparent_50%)] flex items-center justify-center">
-              <Sparkles className="w-12 h-12 sm:w-14 sm:h-14 text-indigo-400" strokeWidth={1.5} />
-            </div>
-          </div>
-          {/* Floating accent badges */}
-          <div className="absolute -top-1 -right-1 px-2 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-semibold flex items-center gap-1 backdrop-blur shadow-lg">
-            <ShieldCheck className="w-3 h-3" />
-            <span>AI-Safe</span>
-          </div>
-          <div className="absolute -bottom-1 -left-1 px-2 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-200 text-[10px] font-semibold flex items-center gap-1 backdrop-blur shadow-lg">
-            <Layers className="w-3 h-3" />
-            <span>Multi-Brand</span>
+          <div
+            className={`relative w-full h-full rounded-3xl flex items-center justify-center transition-transform duration-200 ${
+              isDragActive ? 'scale-110' : ''
+            }`}
+          >
+            <CloudUpload
+              className={`w-12 h-12 sm:w-14 sm:h-14 transition-colors ${
+                isDragActive ? 'text-indigo-300' : 'text-indigo-400'
+              }`}
+              strokeWidth={1.5}
+            />
           </div>
         </div>
 
         <h2 className="text-xl sm:text-2xl font-bold text-zinc-100 tracking-tight">
-          Welcome to BrandStudio
+          {isDragActive ? 'Release to upload' : 'Welcome to BrandStudio'}
         </h2>
         <p className="mt-2 text-sm text-zinc-400 leading-relaxed max-w-md mx-auto">
-          Drop your photos and videos to instantly watermark them with your brand
-          and automatically purge AI-generated fingerprints. Supports ZIP archives
-          and batch exports.
+          Drop your photos or videos <span className="text-zinc-200 font-medium">anywhere on this screen</span> to
+          watermark them with your brand and purge AI fingerprints — or click below to browse your files.
         </p>
 
         <div className="mt-7 flex flex-col sm:flex-row items-center justify-center gap-2.5">
@@ -850,8 +974,7 @@ const EmptyStateHero: React.FC<EmptyStateHeroProps> = ({ onUpload, onLoadSamples
             className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98] transition-all"
           >
             <Upload className="w-4 h-4" />
-            <span>Upload Media</span>
-            <kbd className="hidden sm:inline ml-2 px-1.5 py-0.5 rounded bg-indigo-700/50 text-[10px] font-mono">⌘U</kbd>
+            <span>Choose Files</span>
           </button>
           <button
             onClick={onLoadSamples}
@@ -862,24 +985,10 @@ const EmptyStateHero: React.FC<EmptyStateHeroProps> = ({ onUpload, onLoadSamples
           </button>
         </div>
 
-        {/* Feature pills */}
-        <div className="mt-8 grid grid-cols-3 gap-2 max-w-md mx-auto">
-          {[
-            { label: 'AI Fingerprint Purge', icon: ShieldCheck },
-            { label: 'Multi-Logo & Text', icon: Layers },
-            { label: 'Batch ZIP Export', icon: Sparkles },
-          ].map((feat) => {
-            const Icon = feat.icon;
-            return (
-              <div
-                key={feat.label}
-                className="p-2.5 rounded-lg bg-zinc-900/60 border border-zinc-800/80 flex flex-col items-center gap-1 text-[10px] text-zinc-400"
-              >
-                <Icon className="w-3.5 h-3.5 text-zinc-300" />
-                <span className="text-center leading-tight">{feat.label}</span>
-              </div>
-            );
-          })}
+        {/* Supported formats */}
+        <div className="mt-7 flex items-center justify-center gap-1.5 text-[11px] text-zinc-500">
+          <Sparkles className="w-3 h-3 text-emerald-400" />
+          <span className="font-mono">PNG · JPG · WebP · GIF · MP4 · WebM · MOV · ZIP</span>
         </div>
       </div>
     </div>
