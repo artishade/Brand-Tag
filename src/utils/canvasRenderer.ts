@@ -66,6 +66,61 @@ function calculateCrop(
 }
 
 /**
+ * Transforms overlay coordinates from preview space to canvas space.
+ * In preview: overlays are positioned relative to mediaRef (before any CSS transform)
+ * In canvas: image is rotated/flipped, so we need to map coordinates accordingly
+ */
+function transformOverlayCoords(
+  x: number,
+  y: number,
+  rotation: number,
+  flipH: boolean,
+  flipV: boolean,
+  canvasWidth: number,
+  canvasHeight: number
+): { x: number; y: number } {
+  // Start with the overlay's percentage coordinates
+  let adjX = x;
+  let adjY = y;
+
+  // Apply inverse transformation to match preview positioning
+  // In preview, overlays are placed on unrotated mediaRef, then mediaRef is transformed
+  // In canvas, image is transformed, so overlays need inverse transform
+  
+  // Handle rotation first (applied to image in canvas)
+  // In preview: user places overlay at (x%, y%) on unrotated media
+  // In canvas: image is rotated, so overlay needs to be placed at transformed position
+  if (rotation === 90) {
+    // 90° CW rotation: (x, y) in preview -> (100-y, x) in rotated canvas
+    // But we also need to account for the fact that canvas dimensions are swapped
+    adjX = 100 - y;
+    adjY = x;
+  } else if (rotation === 180) {
+    // 180° rotation: (x, y) -> (100-x, 100-y)
+    adjX = 100 - x;
+    adjY = 100 - y;
+  } else if (rotation === 270) {
+    // 270° CW (90° CCW): (x, y) -> (y, 100-x)
+    adjX = y;
+    adjY = 100 - x;
+  }
+
+  // Handle flips
+  if (flipH) {
+    adjX = 100 - adjX;
+  }
+  if (flipV) {
+    adjY = 100 - adjY;
+  }
+
+  // Convert percentage to canvas coordinates
+  return {
+    x: (adjX / 100) * canvasWidth,
+    y: (adjY / 100) * canvasHeight,
+  };
+}
+
+/**
  * Renders full composited canvas with adjustments, transformations, and overlays.
  * Output is high-resolution matching media's real dimensions.
  */
@@ -128,8 +183,8 @@ export async function renderCompositedCanvas(
 
   ctx.restore();
   ctx.filter = 'none'; // reset filter for overlays
-  
-  // Reset transformation matrix for overlays - they should be in the final output coordinate system
+
+  // Reset transformation matrix for overlays
   ctx.setTransform(1, 0, 0, 1, 0, 0);
 
   // 3. Optional Vignette effect
@@ -150,18 +205,22 @@ export async function renderCompositedCanvas(
   }
 
   // 4. Render Overlays (Logos and Texts)
-  // Note: Overlays are positioned relative to the FINAL canvas dimensions (after crop/rotation)
-  // x and y are percentages (0-100) of the canvas width/height
+  // Overlays are positioned in preview relative to unrotated mediaRef
+  // We need to transform their coordinates to match the rotated/flipped canvas
   for (const overlay of overlays) {
-    // Coordinate translation: x & y are 0 to 100 percentage of FINAL canvas width & height
-    const posX = (overlay.x / 100) * canvas.width;
-    const posY = (overlay.y / 100) * canvas.height;
+    // Transform overlay coordinates from preview space to canvas space
+    const { x: posX, y: posY } = transformOverlayCoords(
+      overlay.x,
+      overlay.y,
+      edits.rotation,
+      edits.flipH,
+      edits.flipV,
+      canvas.width,
+      canvas.height
+    );
 
     ctx.save();
     ctx.globalAlpha = overlay.opacity;
-    
-    // For rotated images, we need to account for the coordinate system transformation
-    // The overlays should be positioned in the FINAL output space
     ctx.translate(posX, posY);
 
     if (overlay.rotation) {
