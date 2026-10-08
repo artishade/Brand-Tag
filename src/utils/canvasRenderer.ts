@@ -128,6 +128,9 @@ export async function renderCompositedCanvas(
 
   ctx.restore();
   ctx.filter = 'none'; // reset filter for overlays
+  
+  // Reset transformation matrix for overlays - they should be in the final output coordinate system
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
 
   // 3. Optional Vignette effect
   if (edits.vignette > 0) {
@@ -147,13 +150,18 @@ export async function renderCompositedCanvas(
   }
 
   // 4. Render Overlays (Logos and Texts)
+  // Note: Overlays are positioned relative to the FINAL canvas dimensions (after crop/rotation)
+  // x and y are percentages (0-100) of the canvas width/height
   for (const overlay of overlays) {
-    // Coordinate translation: x & y are 0 to 100 percentage of canvas width & height
+    // Coordinate translation: x & y are 0 to 100 percentage of FINAL canvas width & height
     const posX = (overlay.x / 100) * canvas.width;
     const posY = (overlay.y / 100) * canvas.height;
 
     ctx.save();
     ctx.globalAlpha = overlay.opacity;
+    
+    // For rotated images, we need to account for the coordinate system transformation
+    // The overlays should be positioned in the FINAL output space
     ctx.translate(posX, posY);
 
     if (overlay.rotation) {
