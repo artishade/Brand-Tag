@@ -66,57 +66,35 @@ function calculateCrop(
 }
 
 /**
- * Transforms overlay coordinates from preview space to canvas space.
- * In preview: overlays are positioned relative to mediaRef (before any CSS transform)
- * In canvas: image is rotated/flipped, so we need to map coordinates accordingly
+ * Computes overlay pixel coordinates in the EXPORT canvas space.
+ *
+ * Key insight: In the preview (InteractiveCanvas), overlays are children of the
+ * media container which carries the CSS transform (rotate/flip). So an overlay at
+ * (x%, y%) is visually at that position *relative to the rotated media*, and the
+ * transform is applied by CSS automatically.
+ *
+ * In the export canvas, we draw the image with the same transforms, then **reset
+ * to identity** before drawing overlays. This means the overlay's (x%, y%) must be
+ * converted to the equivalent pixel position on the *rotated/flipped* canvas.
+ *
+ * The canvas already accounts for dimension swaps when rotation is 90 or 270
+ * (finalWidth/finalHeight are swapped). So:
+ *   - overlay.x as percentage of the *visual* canvas width  → pixel X
+ *   - overlay.y as percentage of the *visual* canvas height → pixel Y
+ *
+ * Because the preview percentages are relative to the media container's *visual*
+ * (post-transform) box, which matches the canvas dimensions after rotation, we
+ * can simply map percentage → pixel using final canvas dimensions.
+ * The overlay's own rotation then gets applied around that pixel position.
  */
-function transformOverlayCoords(
-  x: number,
-  y: number,
-  rotation: number,
-  flipH: boolean,
-  flipV: boolean,
+function overlayPixels(
+  overlay: WatermarkOverlay,
   canvasWidth: number,
   canvasHeight: number
 ): { x: number; y: number } {
-  // Start with the overlay's percentage coordinates
-  let adjX = x;
-  let adjY = y;
-
-  // Apply inverse transformation to match preview positioning
-  // In preview, overlays are placed on unrotated mediaRef, then mediaRef is transformed
-  // In canvas, image is transformed, so overlays need inverse transform
-  
-  // Handle rotation first (applied to image in canvas)
-  // In preview: user places overlay at (x%, y%) on unrotated media
-  // In canvas: image is rotated, so overlay needs to be placed at transformed position
-  if (rotation === 90) {
-    // 90° CW rotation: (x, y) in preview -> (100-y, x) in rotated canvas
-    // But we also need to account for the fact that canvas dimensions are swapped
-    adjX = 100 - y;
-    adjY = x;
-  } else if (rotation === 180) {
-    // 180° rotation: (x, y) -> (100-x, 100-y)
-    adjX = 100 - x;
-    adjY = 100 - y;
-  } else if (rotation === 270) {
-    // 270° CW (90° CCW): (x, y) -> (y, 100-x)
-    adjX = y;
-    adjY = 100 - x;
-  }
-
-  // Handle flips
-  if (flipH) {
-    adjX = 100 - adjX;
-  }
-  if (flipV) {
-    adjY = 100 - adjY;
-  }
-
-  // Convert percentage to canvas coordinates
   return {
-    x: (adjX / 100) * canvasWidth,
-    y: (adjY / 100) * canvasHeight,
+    x: (overlay.x / 100) * canvasWidth,
+    y: (overlay.y / 100) * canvasHeight,
   };
 }
 
@@ -154,7 +132,7 @@ export async function renderCompositedCanvas(
   const b = 100 + edits.brightness;
   const c = 100 + edits.contrast;
   const s = 100 + edits.saturation;
-  const hRotate = edits.warmth * 0.5; // subtle warmth via hue-rotate/sepia
+  const hRotate = edits.warmth * 0.5; // subtle warmth via hue-rotate
   ctx.filter = `brightness(${b}%) contrast(${c}%) saturate(${s}%) hue-rotate(${hRotate}deg)`;
 
   // 2. Transformations (Rotation & Flip)
@@ -205,19 +183,9 @@ export async function renderCompositedCanvas(
   }
 
   // 4. Render Overlays (Logos and Texts)
-  // Overlays are positioned in preview relative to unrotated mediaRef
-  // We need to transform their coordinates to match the rotated/flipped canvas
+  // Overlay coordinates are percentages relative to the visual canvas dimensions.
   for (const overlay of overlays) {
-    // Transform overlay coordinates from preview space to canvas space
-    const { x: posX, y: posY } = transformOverlayCoords(
-      overlay.x,
-      overlay.y,
-      edits.rotation,
-      edits.flipH,
-      edits.flipV,
-      canvas.width,
-      canvas.height
-    );
+    const { x: posX, y: posY } = overlayPixels(overlay, canvas.width, canvas.height);
 
     ctx.save();
     ctx.globalAlpha = overlay.opacity;
@@ -251,7 +219,7 @@ export async function renderCompositedCanvas(
       }
     } else if (overlay.type === 'text') {
       // Text rendering
-      // Scale font size proportionally to canvas width (baseline: 1920px)
+      // Scale font size proportionally to canvas width (baseline: 1400px)
       const scaleFactor = canvas.width / 1400;
       const computedFontSize = Math.max(16, (overlay.fontSize || 28) * scaleFactor * (overlay.scale || 1));
       const fontFamily = overlay.fontFamily || "'Plus Jakarta Sans', sans-serif";

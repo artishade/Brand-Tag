@@ -34,7 +34,6 @@ interface MediaEditorSidebarProps {
   onAddTextOverlay: () => void;
   onUpdateOverlay: (id: string, updates: Partial<WatermarkOverlay>) => void;
   onDeleteOverlay: (id: string) => void;
-  onApplyPresetLayout: (preset: 'modern-corner' | 'minimal-bottom' | 'center-protect' | 'social-bundle') => void;
   activeOverlays: WatermarkOverlay[];
   selectedOverlayId: string | null;
   onSelectOverlay: (id: string | null) => void;
@@ -61,7 +60,6 @@ export const MediaEditorSidebar: React.FC<MediaEditorSidebarProps> = ({
   onAddTextOverlay,
   onUpdateOverlay,
   onDeleteOverlay,
-  onApplyPresetLayout,
   activeOverlays,
   selectedOverlayId,
   onSelectOverlay,
@@ -162,7 +160,6 @@ export const MediaEditorSidebar: React.FC<MediaEditorSidebarProps> = ({
             onAddTextOverlay={onAddTextOverlay}
             onUpdateOverlay={onUpdateOverlay}
             onDeleteOverlay={onDeleteOverlay}
-            onApplyPresetLayout={onApplyPresetLayout}
           />
         )}
 

@@ -30,7 +30,6 @@ import {
 import {
   INITIAL_BRAND_CONFIG,
   SAMPLE_MEDIA_LIST,
-  generateSampleLogoSVG,
 } from './utils/sampleData';
 import { cleanMediaFile } from './utils/aiCleaner';
 import { unpackZipArchive } from './utils/zipHandler';
@@ -317,157 +316,6 @@ export default function App() {
       }));
     }
     setSelectedOverlayId(newText.id);
-  };
-
-  // Apply a layout preset template
-  const handleApplyPresetLayout = (
-    preset: 'modern-corner' | 'minimal-bottom' | 'center-protect' | 'social-bundle'
-  ) => {
-    const logoUrl = globalConfig.defaultLogo?.url || generateSampleLogoSVG('BrandStudio', 'badge');
-
-    let newOverlays: WatermarkOverlay[] = [];
-
-    if (preset === 'modern-corner') {
-      newOverlays = [
-        {
-          id: `ov-logo-${Date.now()}`,
-          type: 'logo',
-          content: logoUrl,
-          x: 18,
-          y: 15,
-          scale: 1.0,
-          opacity: 0.95,
-          rotation: 0,
-          blendMode: 'normal',
-        },
-        {
-          id: `ov-text-1-${Date.now()}`,
-          type: 'text',
-          content: '© 2026 OFFICIAL ARCHIVE',
-          x: 50,
-          y: 92,
-          scale: 1.0,
-          opacity: 0.85,
-          rotation: 0,
-          color: '#ffffff',
-          fontSize: 20,
-          fontFamily: "'JetBrains Mono', monospace",
-          fontWeight: 'medium',
-          shadow: true,
-          backgroundColor: '#09090b',
-          backgroundOpacity: 0.7,
-        },
-        {
-          id: `ov-text-2-${Date.now()}`,
-          type: 'text',
-          content: '@creator.studio',
-          x: 85,
-          y: 15,
-          scale: 1.0,
-          opacity: 0.9,
-          rotation: 0,
-          color: '#38bdf8',
-          fontSize: 22,
-          fontFamily: "'Plus Jakarta Sans', sans-serif",
-          fontWeight: 'bold',
-          shadow: true,
-        },
-      ];
-    } else if (preset === 'minimal-bottom') {
-      newOverlays = [
-        {
-          id: `ov-logo-${Date.now()}`,
-          type: 'logo',
-          content: logoUrl,
-          x: 85,
-          y: 88,
-          scale: 0.8,
-          opacity: 0.85,
-          rotation: 0,
-          blendMode: 'normal',
-        },
-        {
-          id: `ov-text-1-${Date.now()}`,
-          type: 'text',
-          content: 'www.studiobrand.io',
-          x: 20,
-          y: 92,
-          scale: 0.9,
-          opacity: 0.8,
-          rotation: 0,
-          color: '#d4d4d8',
-          fontSize: 18,
-          fontFamily: "'JetBrains Mono', monospace",
-          fontWeight: 'normal',
-          shadow: true,
-        },
-      ];
-    } else if (preset === 'center-protect') {
-      newOverlays = [
-        {
-          id: `ov-logo-${Date.now()}`,
-          type: 'logo',
-          content: logoUrl,
-          x: 50,
-          y: 50,
-          scale: 1.8,
-          opacity: 0.25,
-          rotation: -15,
-          blendMode: 'screen',
-        },
-        {
-          id: `ov-text-1-${Date.now()}`,
-          type: 'text',
-          content: 'PROTECTED CONTENT · DO NOT DISTRIBUTE',
-          x: 50,
-          y: 85,
-          scale: 1.1,
-          opacity: 0.9,
-          rotation: 0,
-          color: '#ef4444',
-          fontSize: 22,
-          fontFamily: "'JetBrains Mono', monospace",
-          fontWeight: 'bold',
-          shadow: true,
-          backgroundColor: '#000000',
-          backgroundOpacity: 0.8,
-        },
-      ];
-    } else {
-      // Social bundle
-      newOverlays = [
-        {
-          id: `ov-logo-${Date.now()}`,
-          type: 'logo',
-          content: logoUrl,
-          x: 84,
-          y: 16,
-          scale: 0.9,
-          opacity: 0.9,
-          rotation: 0,
-          blendMode: 'normal',
-        },
-        {
-          id: `ov-text-1-${Date.now()}`,
-          type: 'text',
-          content: 'Follow @studio.creatives',
-          x: 22,
-          y: 88,
-          scale: 1.0,
-          opacity: 0.95,
-          rotation: 0,
-          color: '#ffffff',
-          fontSize: 22,
-          fontFamily: "'Plus Jakarta Sans', sans-serif",
-          fontWeight: 'bold',
-          shadow: true,
-          backgroundColor: '#4f46e5',
-          backgroundOpacity: 0.9,
-        },
-      ];
-    }
-
-    setGlobalConfig((prev) => ({ ...prev, overlays: newOverlays }));
   };
 
   // Reset current item's custom overlays back to global
@@ -808,7 +656,6 @@ export default function App() {
               onAddTextOverlay={handleAddTextOverlay}
               onUpdateOverlay={handleUpdateOverlay}
               onDeleteOverlay={handleDeleteOverlay}
-              onApplyPresetLayout={handleApplyPresetLayout}
               activeOverlays={activeOverlays}
               selectedOverlayId={selectedOverlayId}
               onSelectOverlay={setSelectedOverlayId}

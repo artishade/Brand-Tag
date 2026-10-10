@@ -1,28 +1,22 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Play,
   Pause,
-  Volume2,
-  VolumeX,
-  RotateCw,
-  Trash2,
-  Copy,
   Eye,
-  Layers,
   Sparkles,
-  Maximize2,
   Move,
   Type,
-  Image as ImageIcon,
+  Layers,
+  RotateCw,
+  Maximize2,
+  ChevronLeft,
   ChevronUp,
   ChevronDown,
-  ChevronLeft,
   ChevronRight,
+  Copy,
+  Trash2,
   Minus,
   Plus,
-  CornerUpLeft,
-  CornerUpRight,
-  CornerDownRight,
   Square,
   X,
 } from 'lucide-react';
@@ -55,7 +49,6 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   onApplyCurrentToAll,
   onOpenAIInspector,
 }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
   const mediaRef = useRef<HTMLDivElement>(null);
   const videoElementRef = useRef<HTMLVideoElement>(null);
   const overlayElementsRef = useRef<Record<string, HTMLElement | null>>({});
@@ -66,11 +59,11 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  // Interaction state — using a ref-based pointer model for fluid, multi-mode drag
+  // Interaction state
   const [interactionMode, setInteractionMode] = useState<'move' | 'scale' | 'rotate' | null>(null);
   const activeOverlayRef = useRef<string | null>(null);
-  // Timestamp of the last drag end — prevents the click after a drag from deselecting
   const lastInteractEndRef = useRef(0);
+  const hasMovedRef = useRef(false);
 
   const interactionStartRef = useRef<{
     startX: number;
@@ -110,21 +103,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     }
   };
 
-  const toggleMute = () => {
-    if (!videoElementRef.current) return;
-    videoElementRef.current.muted = !isMuted;
-    setIsMuted(!isMuted);
-  };
 
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const time = parseFloat(e.target.value);
-    if (videoElementRef.current) {
-      videoElementRef.current.currentTime = time;
-      setCurrentTime(time);
-    }
-  };
-
-  // Format seconds to mm:ss
   const formatTime = (sec: number) => {
     if (!isFinite(sec) || isNaN(sec)) return '0:00';
     const m = Math.floor(sec / 60);
@@ -132,10 +111,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
-  // -------------------------------------------------------------
-  // Pointer Drag Engine — Mobile-Safe & Unified
-  // -------------------------------------------------------------
-
+  // Touch-friendly pointer event coordinate extraction
   const getPointerCoords = (e: React.PointerEvent | React.TouchEvent | PointerEvent | TouchEvent) => {
     if ('touches' in e && e.touches.length > 0) {
       return { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -150,6 +126,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     activeOverlayRef.current = overlay.id;
     setInteractionMode('move');
     lastInteractEndRef.current = 0;
+    hasMovedRef.current = false;
 
     const { x: clientX, y: clientY } = getPointerCoords(e);
     interactionStartRef.current = {
@@ -222,7 +199,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     };
   };
 
-  // Global pointer listeners
+  // Global pointer listeners for drag interactions
   useEffect(() => {
     if (!interactionMode || !activeOverlayRef.current || !interactionStartRef.current) return;
 
@@ -243,6 +220,14 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
         const deltaPercentX = (deltaX / mediaRect.width) * 100;
         const deltaPercentY = (deltaY / mediaRect.height) * 100;
+
+        // Only treat as move after a small threshold to allow tap-to-select
+        const dist = Math.hypot(deltaX, deltaY);
+        if (dist > 5 && !hasMovedRef.current) {
+          hasMovedRef.current = true;
+        }
+
+        if (!hasMovedRef.current) return;
 
         // Full 0–100% range: overlays can be placed anywhere, edge to edge
         const newX = Math.max(0, Math.min(100, interactionStartRef.current.initOverlayX + deltaPercentX));
@@ -266,7 +251,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         let newRot = Math.round(initRotation + deltaAngle);
         newRot = ((newRot % 360) + 360) % 360;
 
-        // Snap near 0, 90, 180, 270
+        // Snap to cardinal angles
         for (const s of [0, 90, 180, 270, 360]) {
           if (Math.abs(newRot - s) <= 4) {
             newRot = s % 360;
@@ -278,31 +263,32 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       }
     };
 
-    const onPointerEnd = () => {
+    const onPointerUp = () => {
       lastInteractEndRef.current = Date.now();
       setInteractionMode(null);
       activeOverlayRef.current = null;
       interactionStartRef.current = null;
+      hasMovedRef.current = false;
     };
 
     window.addEventListener('pointermove', onPointerMove, { passive: false });
-    window.addEventListener('pointerup', onPointerEnd);
-    window.addEventListener('pointercancel', onPointerEnd);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
     window.addEventListener('touchmove', onPointerMove, { passive: false });
-    window.addEventListener('touchend', onPointerEnd);
-    window.addEventListener('touchcancel', onPointerEnd);
+    window.addEventListener('touchend', onPointerUp);
+    window.addEventListener('touchcancel', onPointerUp);
 
     return () => {
       window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerEnd);
-      window.removeEventListener('pointercancel', onPointerEnd);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
       window.removeEventListener('touchmove', onPointerMove);
-      window.removeEventListener('touchend', onPointerEnd);
-      window.removeEventListener('touchcancel', onPointerEnd);
+      window.removeEventListener('touchend', onPointerUp);
+      window.removeEventListener('touchcancel', onPointerUp);
     };
   }, [interactionMode, onUpdateOverlay]);
 
-  // Nudge position (D-Pad) — full 0–100% range
+  // Nudge position (D-Pad)
   const nudgeOverlay = (dx: number, dy: number) => {
     if (!selectedOverlayId) return;
     const target = overlays.find((ov) => ov.id === selectedOverlayId);
@@ -322,14 +308,13 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
   };
 
   // Quick snap positions
-  const snapTo = (overlayId: string, position: 'tl' | 'tr' | 'center' | 'bl' | 'br' | 'bc') => {
+  const snapTo = (overlayId: string, position: 'tl' | 'tr' | 'center' | 'bl' | 'br') => {
     const coords: Record<string, { x: number; y: number }> = {
-      tl: { x: 10, y: 8 },
-      tr: { x: 90, y: 8 },
+      tl: { x: 8, y: 8 },
+      tr: { x: 92, y: 8 },
       center: { x: 50, y: 50 },
-      bl: { x: 10, y: 92 },
-      br: { x: 90, y: 92 },
-      bc: { x: 50, y: 93 },
+      bl: { x: 8, y: 92 },
+      br: { x: 92, y: 92 },
     };
     if (coords[position]) {
       onUpdateOverlay(overlayId, coords[position]);
@@ -350,8 +335,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
     ? 'none'
     : `rotate(${edits.rotation}deg) scaleX(${edits.flipH ? -1 : 1}) scaleY(${edits.flipV ? -1 : 1})`;
 
-  // Clicking empty canvas deselects — but NOT when the click lands on an overlay
-  // or immediately after finishing a drag (which would kill move/scale/rotate).
+  // Clicking empty canvas space deselects
   const handleStageClick = (e: React.MouseEvent) => {
     if (Date.now() - lastInteractEndRef.current < 250) return;
     const target = e.target as HTMLElement;
@@ -361,32 +345,24 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
 
   return (
     <div
-      ref={containerRef}
       onClick={handleStageClick}
-      className="relative flex-1 bg-[#0a0a0c] flex flex-col items-center justify-center p-2 sm:p-6 overflow-hidden select-none touch-none"
-      style={{
-        backgroundImage: `
-          radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.06) 0%, transparent 70%),
-          radial-gradient(circle at 50% 50%, rgba(63, 63, 70, 0.5) 1px, transparent 1px)
-        `,
-        backgroundSize: '100% 100%, 24px 24px',
-      }}
+      className="relative flex-1 bg-[#0a0a0c] flex items-center justify-center p-2 sm:p-6 overflow-hidden select-none touch-none"
     >
-      {/* Top Studio Control Strip */}
-      <div className="absolute top-2 sm:top-4 inset-x-2 sm:inset-x-6 flex flex-wrap items-center justify-between gap-2 z-20 pointer-events-none">
-        {/* Sync Mode Status Pill */}
+      {/* Minimal Top Bar */}
+      <div className="absolute top-3 sm:top-4 inset-x-3 sm:inset-x-6 flex items-center justify-between gap-2 z-20 pointer-events-none">
+        {/* Sync Status Pill */}
         <div className="pointer-events-auto glass-panel rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 text-[11px] sm:text-xs flex items-center gap-2 shadow-xl">
           <Layers className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
           {isCustomForItem ? (
-            <div className="flex items-center gap-2">
-              <span className="text-zinc-200 font-medium">Custom Layout</span>
-              <span className="text-[10px] text-amber-400/80 hidden sm:inline">·</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-zinc-200 font-medium">Custom</span>
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onResetToGlobal();
                 }}
-                className="text-[11px] text-amber-400 hover:text-amber-300 font-medium cursor-pointer"
+                className="text-[10px] text-amber-400 hover:text-amber-300 cursor-pointer"
+                title="Reset to global template"
               >
                 Reset
               </button>
@@ -395,22 +371,18 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                   e.stopPropagation();
                   onApplyCurrentToAll();
                 }}
-                className="px-2 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-medium rounded-md transition-colors cursor-pointer"
-                title="Apply this exact layout to all uploaded media files"
+                className="text-[10px] px-1.5 py-0.25 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-medium cursor-pointer"
+                title="Apply this layout to all media"
               >
-                Sync All
+                Sync
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5">
-              <span className="text-zinc-200 font-medium">Global Template</span>
-              <span className="text-zinc-600 hidden sm:inline">·</span>
-              <span className="text-zinc-500 hidden sm:inline text-[11px]">auto-applied to all</span>
-            </div>
+            <span className="text-zinc-200 font-medium">Global Template</span>
           )}
         </div>
 
-        {/* View Original / AI Clean status */}
+        {/* View Original + AI Clean */}
         <div className="pointer-events-auto flex items-center gap-1.5">
           <button
             onMouseDown={(e) => { e.stopPropagation(); setShowOriginal(true); }}
@@ -419,33 +391,33 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             onTouchStart={(e) => { e.stopPropagation(); setShowOriginal(true); }}
             onTouchEnd={() => setShowOriginal(false)}
             onClick={(e) => e.stopPropagation()}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 text-[11px] sm:text-xs font-medium rounded-xl border backdrop-blur transition-all cursor-pointer active:scale-95 ${
+            className={`p-1.5 sm:p-2 rounded-lg border text-xs transition-all cursor-pointer active:scale-90 ${
               showOriginal
-                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-lg shadow-amber-500/10'
-                : 'bg-zinc-900/80 text-zinc-300 border-zinc-800 hover:border-zinc-700 hover:bg-zinc-900'
+                ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                : 'bg-zinc-900/80 text-zinc-300 border-zinc-800 hover:border-zinc-700'
             }`}
-            title="Hold to compare with the original unedited media"
+            title="Hold to compare original"
+            aria-label="Compare original"
           >
             <Eye className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{showOriginal ? 'Viewing Original' : 'Hold Original'}</span>
-            <span className="sm:hidden">{showOriginal ? 'Orig' : 'Hold'}</span>
           </button>
 
           <button
             onClick={(e) => { e.stopPropagation(); onOpenAIInspector(); }}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 text-[11px] sm:text-xs font-medium rounded-xl bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 hover:border-emerald-500/60 backdrop-blur transition-all cursor-pointer active:scale-95"
+            className="p-1.5 sm:p-2 rounded-lg bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 hover:border-emerald-500/60 transition-all cursor-pointer active:scale-90"
+            title="AI metadata details"
+            aria-label="AI metadata"
           >
             <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden sm:inline">Purified</span>
           </button>
         </div>
       </div>
 
-      {/* Main Interactive Stage */}
-      <div className="relative w-full h-full flex items-center justify-center p-2">
+      {/* Interactive Stage */}
+      <div className="relative w-full h-full flex items-center justify-center">
         <div
           ref={mediaRef}
-          className="relative max-w-[96vw] md:max-w-[80vw] max-h-[58vh] sm:max-h-[68vh] shadow-2xl rounded-lg overflow-hidden border border-zinc-800/80 bg-zinc-900 flex items-center justify-center transition-all touch-none select-none"
+          className="relative max-w-[96vw] md:max-w-[80vw] max-h-[58vh] sm:max-h-[68vh] shadow-xl rounded-lg overflow-hidden border border-zinc-800/80 bg-zinc-900 flex items-center justify-center transition-all touch-none select-none"
           style={{
             aspectRatio:
               edits.aspectRatio === '1:1'
@@ -462,7 +434,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Base Media: Video or Image */}
+          {/* Base Media */}
           {item.type === 'video' ? (
             <video
               ref={videoElementRef}
@@ -471,22 +443,15 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               playsInline
               muted={isMuted}
               onTimeUpdate={() => {
-                if (videoElementRef.current) {
-                  setCurrentTime(videoElementRef.current.currentTime);
-                }
+                if (videoElementRef.current) setCurrentTime(videoElementRef.current.currentTime);
               }}
               onLoadedMetadata={() => {
-                if (videoElementRef.current) {
-                  setDuration(videoElementRef.current.duration);
-                }
+                if (videoElementRef.current) setDuration(videoElementRef.current.duration);
               }}
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
               className="max-w-full max-h-[58vh] sm:max-h-[68vh] object-contain transition-transform"
-              style={{
-                filter: previewFilter,
-                transform: previewTransform,
-              }}
+              style={{ filter: previewFilter, transform: previewTransform }}
             />
           ) : (
             <img
@@ -494,14 +459,11 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               alt={item.name}
               draggable={false}
               className="max-w-full max-h-[58vh] sm:max-h-[68vh] object-contain transition-transform select-none"
-              style={{
-                filter: previewFilter,
-                transform: previewTransform,
-              }}
+              style={{ filter: previewFilter, transform: previewTransform }}
             />
           )}
 
-          {/* Vignette overlay */}
+          {/* Vignette */}
           {!showOriginal && edits.vignette > 0 && (
             <div
               className="absolute inset-0 pointer-events-none"
@@ -513,7 +475,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
             />
           )}
 
-          {/* Interactive Overlays Layer */}
+          {/* Interactive Overlays */}
           {!showOriginal &&
             overlays.map((overlay) => {
               const isSelected = selectedOverlayId === overlay.id;
@@ -521,14 +483,12 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                 <div
                   key={overlay.id}
                   data-overlay-id={overlay.id}
-                  ref={(el) => {
-                    overlayElementsRef.current[overlay.id] = el;
-                  }}
+                  ref={(el) => { overlayElementsRef.current[overlay.id] = el; }}
                   onPointerDown={(e) => handleStartMove(e, overlay)}
                   className={`absolute transform -translate-x-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing touch-none select-none ${
                     isSelected
-                      ? 'active-overlay-glow z-30'
-                      : 'hover:ring-2 hover:ring-indigo-400/40 hover:ring-offset-1 hover:ring-offset-transparent z-10'
+                      ? 'ring-2 ring-indigo-400 shadow-lg shadow-indigo-500/30 z-30'
+                      : 'hover:ring-1 hover:ring-indigo-400/40 z-10'
                   }`}
                   style={{
                     left: `${overlay.x}%`,
@@ -539,20 +499,16 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                   }}
                 >
                   {overlay.type === 'logo' ? (
-                    <div className="relative pointer-events-none">
-                      <img
-                        src={overlay.content}
-                        alt="Logo watermark"
-                        draggable={false}
-                        className="max-w-[140px] sm:max-w-[200px] h-auto drop-shadow-md select-none pointer-events-none"
-                        style={{
-                          mixBlendMode: overlay.blendMode || 'normal',
-                        }}
-                      />
-                    </div>
+                    <img
+                      src={overlay.content}
+                      alt="Logo watermark"
+                      draggable={false}
+                      className="max-w-[120px] sm:max-w-[180px] h-auto drop-shadow select-none pointer-events-none"
+                      style={{ mixBlendMode: overlay.blendMode || 'normal' }}
+                    />
                   ) : (
                     <div
-                      className="px-2.5 py-1 rounded select-none font-medium whitespace-nowrap pointer-events-none"
+                      className="px-2 py-0.5 rounded text-xs sm:text-sm font-medium whitespace-nowrap pointer-events-none"
                       style={{
                         color: overlay.color || '#ffffff',
                         fontSize: `${overlay.fontSize || 22}px`,
@@ -562,9 +518,8 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                           overlay.backgroundColor && (overlay.backgroundOpacity ?? 0.8) > 0
                             ? overlay.backgroundColor
                             : 'transparent',
-                        opacity: 1,
                         textShadow: overlay.shadow
-                          ? '0 2px 10px rgba(0,0,0,0.85), 0 1px 3px rgba(0,0,0,0.9)'
+                          ? '0 1px 6px rgba(0,0,0,0.85), 0 1px 2px rgba(0,0,0,0.9)'
                           : 'none',
                       }}
                     >
@@ -572,30 +527,30 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                     </div>
                   )}
 
-                  {/* Selection handles */}
+                  {/* Minimal selection handles */}
                   {isSelected && (
                     <>
                       {/* Move indicator */}
-                      <div className="absolute -top-3.5 -left-3.5 w-7 h-7 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-lg ring-2 ring-white/30 pointer-events-none">
-                        <Move className="w-3.5 h-3.5" />
+                      <div className="absolute -top-3 -left-3 w-5 h-5 bg-indigo-600 rounded-full flex items-center justify-center text-white shadow-md ring-1 ring-white/30 pointer-events-none">
+                        <Move className="w-2.5 h-2.5" />
                       </div>
 
-                      {/* Rotation handle (top-center) */}
+                      {/* Rotate handle */}
                       <div
                         onPointerDown={(e) => handleStartRotate(e, overlay)}
-                        className="absolute -top-8 left-1/2 -translate-x-1/2 w-7 h-7 bg-zinc-800 hover:bg-zinc-700 text-amber-400 rounded-full flex items-center justify-center shadow-lg ring-2 ring-white/20 cursor-alias touch-none pointer-events-auto active:scale-110 transition-transform"
-                        title="Drag to rotate"
+                        className="absolute -top-6 left-1/2 -translate-x-1/2 w-5 h-5 bg-zinc-800 hover:bg-zinc-700 text-amber-400 rounded-full flex items-center justify-center shadow-md ring-1 ring-white/20 cursor-alias touch-none pointer-events-auto active:scale-110 transition-transform"
+                        title="Rotate"
                       >
-                        <RotateCw className="w-3.5 h-3.5" />
+                        <RotateCw className="w-2.5 h-2.5" />
                       </div>
 
-                      {/* Scale handle (bottom-right corner) */}
+                      {/* Scale handle */}
                       <div
                         onPointerDown={(e) => handleStartScale(e, overlay)}
-                        className="absolute -bottom-3.5 -right-3.5 w-8 h-8 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full flex items-center justify-center shadow-xl ring-2 ring-white/30 cursor-se-resize touch-none pointer-events-auto active:scale-110 transition-transform"
-                        title="Drag to resize"
+                        className="absolute -bottom-3 -right-3 w-6 h-6 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full flex items-center justify-center shadow-md ring-1 ring-white/30 cursor-se-resize touch-none pointer-events-auto active:scale-110 transition-transform"
+                        title="Resize"
                       >
-                        <Maximize2 className="w-4 h-4" />
+                        <Maximize2 className="w-3 h-3" />
                       </div>
                     </>
                   )}
@@ -605,200 +560,156 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
         </div>
       </div>
 
-      {/* Floating Selected Overlay Quick Adjuster & Mobile D-Pad Control Dock */}
+      {/* Minimal Floating Controls - only when selected */}
       {selectedOverlay && (
         <div
           onClick={(e) => e.stopPropagation()}
-          className="absolute bottom-3 sm:bottom-6 inset-x-2 sm:inset-x-auto sm:max-w-2xl mx-auto glass-panel rounded-2xl p-2.5 sm:px-4 sm:py-3 flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs shadow-2xl z-30 animate-fade-in-up"
+          className="absolute bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 glass-panel rounded-xl px-2 sm:px-4 py-2 flex items-center gap-1.5 sm:gap-3 text-[10px] sm:text-xs shadow-2xl z-30"
         >
-          {/* Top Row: Overlay Label + D-Pad + Actions */}
-          <div className="flex items-center justify-between w-full sm:w-auto gap-2">
-            <div className="flex items-center gap-1.5 font-medium shrink-0">
-              {selectedOverlay.type === 'logo' ? (
-                <span className="text-indigo-400 flex items-center gap-1">
-                  <ImageIcon className="w-3.5 h-3.5" /> Logo
-                </span>
-              ) : (
-                <span className="text-sky-400 flex items-center gap-1 truncate max-w-[90px] sm:max-w-[120px]">
-                  <Type className="w-3.5 h-3.5 shrink-0" /> {selectedOverlay.content}
-                </span>
-              )}
-            </div>
-
-            {/* Mobile D-Pad */}
-            <div className="flex items-center gap-0.5 bg-zinc-950/60 px-1.5 py-1 rounded-lg border border-zinc-800/80">
-              <span className="text-[10px] text-zinc-500 font-mono hidden sm:inline mr-1">Move</span>
-              <button
-                onClick={() => nudgeOverlay(-2, 0)}
-                className="p-1.5 rounded-md hover:bg-zinc-800 active:bg-indigo-600 text-zinc-300 hover:text-white cursor-pointer transition-colors"
-                title="Nudge Left (←)"
-                aria-label="Move left"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => nudgeOverlay(0, -2)}
-                className="p-1.5 rounded-md hover:bg-zinc-800 active:bg-indigo-600 text-zinc-300 hover:text-white cursor-pointer transition-colors"
-                title="Nudge Up (↑)"
-                aria-label="Move up"
-              >
-                <ChevronUp className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => nudgeOverlay(0, 2)}
-                className="p-1.5 rounded-md hover:bg-zinc-800 active:bg-indigo-600 text-zinc-300 hover:text-white cursor-pointer transition-colors"
-                title="Nudge Down (↓)"
-                aria-label="Move down"
-              >
-                <ChevronDown className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => nudgeOverlay(2, 0)}
-                className="p-1.5 rounded-md hover:bg-zinc-800 active:bg-indigo-600 text-zinc-300 hover:text-white cursor-pointer transition-colors"
-                title="Nudge Right (→)"
-                aria-label="Move right"
-              >
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            {/* Actions: Duplicate & Delete */}
-            <div className="flex items-center gap-1 shrink-0">
-              <button
-                onClick={() => onDuplicateOverlay(selectedOverlay.id)}
-                className="p-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white cursor-pointer transition-colors"
-                title="Duplicate overlay (D)"
-                aria-label="Duplicate overlay"
-              >
-                <Copy className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => onDeleteOverlay(selectedOverlay.id)}
-                className="p-1.5 rounded-md bg-red-950/60 hover:bg-red-900 text-red-300 hover:text-red-100 cursor-pointer transition-colors"
-                title="Delete overlay (Del)"
-                aria-label="Delete overlay"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
+          {/* Type indicator */}
+          <div className="flex items-center gap-1 font-medium shrink-0">
+            {selectedOverlay.type === 'logo' ? (
+              <span className="text-indigo-400 flex items-center gap-1">
+                <img
+                  src={selectedOverlay.content}
+                  alt=""
+                  className="w-4 h-4 object-contain"
+                /> Logo
+              </span>
+            ) : (
+              <span className="text-sky-400 flex items-center gap-1">
+                <Type className="w-3.5 h-3.5" /> Text
+              </span>
+            )}
           </div>
 
-          {/* Bottom Row / Middle: Size Controls & Snap Buttons */}
-          <div className="flex items-center justify-between w-full sm:w-auto gap-2 border-t sm:border-t-0 sm:border-l border-zinc-800 pt-2 sm:pt-0 sm:pl-3">
-            {/* Scale Control */}
-            <div className="flex items-center gap-1.5">
-              <span className="text-zinc-400 text-[11px]">Size</span>
-              <button
-                onClick={() => adjustScaleStep(-0.1)}
-                className="w-5 h-5 rounded-md bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-zinc-300 cursor-pointer transition-colors"
-                title="Decrease Size"
-                aria-label="Decrease size"
-              >
-                <Minus className="w-3 h-3" />
-              </button>
-              <input
-                type="range"
-                min="0.25"
-                max="3.0"
-                step="0.05"
-                value={selectedOverlay.scale}
-                onChange={(e) =>
-                  onUpdateOverlay(selectedOverlay.id, { scale: parseFloat(e.target.value) })
-                }
-                className="w-16 sm:w-20"
-              />
-              <button
-                onClick={() => adjustScaleStep(0.1)}
-                className="w-5 h-5 rounded-md bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-zinc-300 cursor-pointer transition-colors"
-                title="Increase Size"
-                aria-label="Increase size"
-              >
-                <Plus className="w-3 h-3" />
-              </button>
-              <span className="text-zinc-400 font-mono text-[10px] w-8">
-                {Math.round(selectedOverlay.scale * 100)}%
-              </span>
-            </div>
+          {/* D-Pad for position */}
+          <div className="flex items-center gap-0.25 bg-zinc-950/60 px-1 py-0.5 rounded-lg border border-zinc-800">
+            <button
+              onClick={() => nudgeOverlay(-2, 0)}
+              className="p-0.75 rounded hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer"
+              title="Left" aria-label="Move left"
+            >
+              <ChevronLeft className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => nudgeOverlay(0, -2)}
+              className="p-0.75 rounded hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer"
+              title="Up" aria-label="Move up"
+            >
+              <ChevronUp className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => nudgeOverlay(0, 2)}
+              className="p-0.75 rounded hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer"
+              title="Down" aria-label="Move down"
+            >
+              <ChevronDown className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => nudgeOverlay(2, 0)}
+              className="p-0.75 rounded hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer"
+              title="Right" aria-label="Move right"
+            >
+              <ChevronRight className="w-3 h-3" />
+            </button>
+          </div>
 
-            {/* Snap Presets */}
-            <div className="flex items-center gap-0.5">
-              <button
-                onClick={() => snapTo(selectedOverlay.id, 'tl')}
-                className="p-1 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white cursor-pointer transition-colors"
-                title="Snap Top-Left"
-                aria-label="Snap top-left"
-              >
-                <CornerUpLeft className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => snapTo(selectedOverlay.id, 'tr')}
-                className="p-1 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white cursor-pointer transition-colors"
-                title="Snap Top-Right"
-                aria-label="Snap top-right"
-              >
-                <CornerUpRight className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => snapTo(selectedOverlay.id, 'center')}
-                className="p-1 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white cursor-pointer transition-colors"
-                title="Snap Center"
-                aria-label="Snap center"
-              >
-                <Square className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => snapTo(selectedOverlay.id, 'br')}
-                className="p-1 rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white cursor-pointer transition-colors"
-                title="Snap Bottom-Right"
-                aria-label="Snap bottom-right"
-              >
-                <CornerDownRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
+          {/* Scale */}
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => adjustScaleStep(-0.1)}
+              className="w-5 h-5 rounded bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-zinc-300 cursor-pointer"
+              title="Decrease size" aria-label="Decrease size"
+            >
+              <Minus className="w-2.5 h-2.5" />
+            </button>
+            <span className="font-mono text-zinc-400 w-8 text-center">
+              {Math.round(selectedOverlay.scale * 100)}%
+            </span>
+            <button
+              onClick={() => adjustScaleStep(0.1)}
+              className="w-5 h-5 rounded bg-zinc-800 hover:bg-zinc-700 flex items-center justify-center text-zinc-300 cursor-pointer"
+              title="Increase size" aria-label="Increase size"
+            >
+              <Plus className="w-2.5 h-2.5" />
+            </button>
+          </div>
+
+          {/* Snap shortcuts */}
+          <div className="flex items-center gap-0.25">
+            <button onClick={() => snapTo(selectedOverlay.id, 'tl')} className="p-0.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white cursor-pointer" title="Top-left" aria-label="Snap top-left">
+              <Square className="w-3 h-3" />
+            </button>
+            <button onClick={() => snapTo(selectedOverlay.id, 'tr')} className="p-0.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white cursor-pointer" title="Top-right" aria-label="Snap top-right">
+              <Square className="w-3 h-3" />
+            </button>
+            <button onClick={() => snapTo(selectedOverlay.id, 'bl')} className="p-0.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white cursor-pointer" title="Bottom-left" aria-label="Snap bottom-left">
+              <Square className="w-3 h-3" />
+            </button>
+            <button onClick={() => snapTo(selectedOverlay.id, 'br')} className="p-0.5 rounded hover:bg-zinc-800 text-zinc-400 hover:text-white cursor-pointer" title="Bottom-right" aria-label="Snap bottom-right">
+              <Square className="w-3 h-3" />
+            </button>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-0.25">
+            <button
+              onClick={() => onDuplicateOverlay(selectedOverlay.id)}
+              className="p-0.5 rounded hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer"
+              title="Duplicate" aria-label="Duplicate overlay"
+            >
+              <Copy className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => onDeleteOverlay(selectedOverlay.id)}
+              className="p-0.5 rounded hover:bg-red-950/60 text-red-300 hover:text-red-100 cursor-pointer"
+              title="Delete" aria-label="Delete overlay"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => onSelectOverlay(null)}
+              className="p-0.5 rounded hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer"
+              title="Close" aria-label="Close controls"
+            >
+              <X className="w-3 h-3" />
+            </button>
           </div>
         </div>
       )}
 
-      {/* Video Control Bar */}
+      {/* Video Control Bar - minimal */}
       {item.type === 'video' && (
         <div
           onClick={(e) => e.stopPropagation()}
-          className="absolute bottom-4 inset-x-4 sm:inset-x-8 max-w-xl mx-auto glass-panel rounded-xl px-3 py-2 sm:px-4 flex items-center gap-2 sm:gap-3 z-20 shadow-2xl"
+          className="absolute bottom-3 sm:bottom-5 inset-x-3 sm:inset-x-0 max-w-md mx-auto glass-panel rounded-xl px-2.5 sm:px-4 py-1.5 flex items-center gap-2 sm:gap-3 z-20 shadow-xl"
         >
           <button
             onClick={togglePlay}
-            className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer transition-colors shrink-0 active:scale-90"
-            aria-label={isPlaying ? 'Pause video' : 'Play video'}
+            className="p-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer active:scale-90"
+            aria-label={isPlaying ? 'Pause' : 'Play'}
           >
-            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-white" />}
+            {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 fill-white" />}
           </button>
 
-          <span className="font-mono text-[10px] text-zinc-400 tabular-nums shrink-0">
-            {formatTime(currentTime)}
+          <span className="text-[10px] text-zinc-400 font-mono">
+            {formatTime(currentTime)} / {formatTime(duration)}
           </span>
 
           <input
             type="range"
-            min="0"
-            max={duration || 100}
-            step="0.1"
-            value={currentTime}
-            onChange={handleSeek}
-            className="flex-1"
-            aria-label="Seek video"
+            min={0}
+            max={duration || 1}
+            value={currentTime || 0}
+            onChange={(e) => {
+              if (videoElementRef.current) {
+                videoElementRef.current.currentTime = parseFloat(e.target.value);
+                setCurrentTime(parseFloat(e.target.value));
+              }
+            }}
+            className="flex-1 h-1"
           />
-
-          <span className="font-mono text-[10px] text-zinc-400 tabular-nums shrink-0">
-            {formatTime(duration)}
-          </span>
-
-          <button
-            onClick={toggleMute}
-            className="p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-300 hover:text-white cursor-pointer transition-colors shrink-0 active:scale-90"
-            aria-label={isMuted ? 'Unmute' : 'Mute'}
-          >
-            {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-          </button>
         </div>
       )}
     </div>

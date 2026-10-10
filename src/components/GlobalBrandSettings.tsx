@@ -5,13 +5,6 @@ import {
   Image as ImageIcon,
   Plus,
   Trash2,
-  Sparkles,
-  ShieldAlert,
-  LayoutGrid,
-  Square,
-  AlignJustify,
-  CircleDot,
-  Share2,
 } from 'lucide-react';
 import { GlobalBrandConfig, WatermarkOverlay } from '../types';
 import { generateSampleLogoSVG } from '../utils/sampleData';
@@ -22,43 +15,7 @@ interface GlobalBrandSettingsProps {
   onAddTextOverlay: () => void;
   onUpdateOverlay: (id: string, updates: Partial<WatermarkOverlay>) => void;
   onDeleteOverlay: (id: string) => void;
-  onApplyPresetLayout: (preset: 'modern-corner' | 'minimal-bottom' | 'center-protect' | 'social-bundle') => void;
 }
-
-const PRESETS = [
-  {
-    id: 'modern-corner' as const,
-    name: 'Modern Studio',
-    description: 'Logo top-left · Text bottom-center',
-    icon: LayoutGrid,
-    accent: 'from-indigo-500/20 to-blue-500/20',
-    border: 'hover:border-indigo-500/50',
-  },
-  {
-    id: 'minimal-bottom' as const,
-    name: 'Bottom Signature',
-    description: 'Subtle stamp on bottom-right',
-    icon: AlignJustify,
-    accent: 'from-zinc-500/20 to-zinc-600/20',
-    border: 'hover:border-zinc-500/50',
-  },
-  {
-    id: 'center-protect' as const,
-    name: 'Center Protect',
-    description: 'Ghost watermark centered',
-    icon: CircleDot,
-    accent: 'from-rose-500/20 to-red-500/20',
-    border: 'hover:border-rose-500/50',
-  },
-  {
-    id: 'social-bundle' as const,
-    name: 'Social Creator',
-    description: '@handle + Logo top-right',
-    icon: Share2,
-    accent: 'from-fuchsia-500/20 to-purple-500/20',
-    border: 'hover:border-fuchsia-500/50',
-  },
-];
 
 const FONT_OPTIONS = [
   { label: 'Modern Sans', value: "'Plus Jakarta Sans', sans-serif" },
@@ -75,7 +32,6 @@ export const GlobalBrandSettings: React.FC<GlobalBrandSettingsProps> = ({
   onAddTextOverlay,
   onUpdateOverlay,
   onDeleteOverlay,
-  onApplyPresetLayout,
 }) => {
   const logoInputRef = useRef<HTMLInputElement>(null);
 
@@ -156,7 +112,7 @@ export const GlobalBrandSettings: React.FC<GlobalBrandSettingsProps> = ({
             </span>
           </div>
           <p className="text-[11px] text-zinc-400 mt-0.5 leading-snug">
-            Default logo & texts automatically stamp current and newly uploaded files
+            Default logo &amp; texts automatically stamp current and newly uploaded files
           </p>
         </div>
         <input
@@ -167,38 +123,12 @@ export const GlobalBrandSettings: React.FC<GlobalBrandSettingsProps> = ({
         />
       </div>
 
-      {/* Brand Watermark Presets */}
-      <section className="space-y-2.5">
-        <h3 className="flex items-center gap-1.5 text-xs font-semibold text-zinc-200">
-          <LayoutGrid className="w-3.5 h-3.5 text-indigo-400" />
-          <span>Preset Layout Templates</span>
-        </h3>
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          {PRESETS.map((preset) => {
-            const Icon = preset.icon;
-            return (
-              <button
-                key={preset.id}
-                onClick={() => onApplyPresetLayout(preset.id)}
-                className={`group p-3 rounded-xl bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-800 hover:border-indigo-500/40 text-left cursor-pointer transition-all active:scale-95`}
-              >
-                <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${preset.accent} border border-zinc-800 flex items-center justify-center mb-2`}>
-                  <Icon className="w-4 h-4 text-zinc-100" />
-                </div>
-                <div className="font-medium text-zinc-200">{preset.name}</div>
-                <div className="text-[10px] text-zinc-500 mt-0.5 leading-snug">{preset.description}</div>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
       {/* Default Logo Section */}
       <section className="p-3.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="flex items-center gap-1.5 text-xs font-semibold text-zinc-200">
             <ImageIcon className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Default Brand Logo</span>
+            <span>Brand Logo</span>
           </h3>
           <span className="text-[10px] text-zinc-500 font-mono">PNG / SVG / JPG</span>
         </div>
@@ -320,7 +250,7 @@ export const GlobalBrandSettings: React.FC<GlobalBrandSettingsProps> = ({
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[10px] font-mono text-zinc-500 flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
-                  Text Layer #{idx + 1}
+                  Layer #{idx + 1}
                 </span>
                 <button
                   onClick={() => onDeleteOverlay(textOv.id)}
