@@ -267,6 +267,46 @@ export async function renderCompositedCanvas(
       const textWidth = metrics.width;
       const textHeight = computedFontSize * 1.2;
 
+      // --- Resolution-Scaled Positioning with Edge Awareness ---
+      // The overlay position (posX, posY) is a center anchor point derived
+      // from percentage coordinates on the *canvas*. For text overlays, a
+      // center-anchored position can cause the text to overflow the canvas
+      // boundaries (especially on the left/right edges or for wide text).
+      // We compute an edge-adjusted draw position so the text glyph stays
+      // within the visible canvas area, using a proportional padding.
+      const padding = Math.max(canvas.width * 0.02, 12);
+
+      // Determine which horizontal edge the anchor is closer to:
+      //   - x < 50  → left-biased  (text draws left-aligned from posX, clamped by padding)
+      //   - x >= 50 → right-biased (text draws right-aligned, width subtracted)
+      // This preserves Bottom-Left / Bottom-Right semantic positioning while
+      // ensuring the measured text width is accounted for.
+      let drawTextX = 0;
+      if (overlay.x < 50) {
+        // Left-biased: place text so its left edge sits at posX + padding
+        // but don't push past the left canvas edge.
+        const availableWidth = posX;
+        const safeOffset = Math.min(textWidth / 2, availableWidth - padding);
+        drawTextX = -textWidth / 2 + safeOffset;
+      } else {
+        // Right-biased: place text so its right edge stays within bounds
+        const availableWidth = canvas.width - posX;
+        const safeOffset = Math.min(textWidth / 2, availableWidth - padding);
+        drawTextX = textWidth / 2 - safeOffset;
+      }
+
+      // Similarly for vertical positioning — keep text within top/bottom bounds
+      let drawTextY = 0;
+      if (overlay.y < 50) {
+        const availableHeight = posY;
+        const safeOffsetY = Math.min(textHeight / 2, availableHeight - padding);
+        drawTextY = -textHeight / 2 + safeOffsetY;
+      } else {
+        const availableHeight = canvas.height - posY;
+        const safeOffsetY = Math.min(textHeight / 2, availableHeight - padding);
+        drawTextY = textHeight / 2 - safeOffsetY;
+      }
+
       // Optional background pill/box
       if (overlay.backgroundColor && (overlay.backgroundOpacity ?? 0.8) > 0) {
         ctx.save();
@@ -276,15 +316,15 @@ export async function renderCompositedCanvas(
         const padY = computedFontSize * 0.3;
         const r = computedFontSize * 0.3;
 
-        // Rounded rect
+        // Rounded rect — centered on the same (drawTextX, drawTextY) origin
+        // but we anchor the pill to the same edge-adjusted position.
+        const pillX = drawTextX - padX;
+        const pillY = drawTextY - textHeight / 2 - padY;
+        const pillW = textWidth + padX * 2;
+        const pillH = textHeight + padY * 2;
+
         ctx.beginPath();
-        ctx.roundRect(
-          -textWidth / 2 - padX,
-          -textHeight / 2 - padY,
-          textWidth + padX * 2,
-          textHeight + padY * 2,
-          r
-        );
+        ctx.roundRect(pillX, pillY, pillW, pillH, r);
         ctx.fill();
         ctx.restore();
       }
@@ -298,7 +338,7 @@ export async function renderCompositedCanvas(
       }
 
       ctx.fillStyle = overlay.color || '#ffffff';
-      ctx.fillText(overlay.content, 0, 0);
+      ctx.fillText(overlay.content, drawTextX, drawTextY);
     }
 
     ctx.restore();
