@@ -66,35 +66,60 @@ function calculateCrop(
 }
 
 /**
- * Computes overlay pixel coordinates in the EXPORT canvas space.
+ * Transforms overlay coordinates from preview space to canvas space.
  *
- * Key insight: In the preview (InteractiveCanvas), overlays are children of the
- * media container which carries the CSS transform (rotate/flip). So an overlay at
- * (x%, y%) is visually at that position *relative to the rotated media*, and the
- * transform is applied by CSS automatically.
+ * In the preview (InteractiveCanvas), overlays are positioned as CSS percentage
+ * offsets relative to the media container div. The container div has the ORIGINAL
+ * aspect ratio (it does NOT rotate — only the inner <img> gets CSS rotate/flip).
+ * The image is visually rotated/flipped inside that container, but overlay
+ * positions stay as percentages of the original-ratio container.
  *
- * In the export canvas, we draw the image with the same transforms, then **reset
- * to identity** before drawing overlays. This means the overlay's (x%, y%) must be
- * converted to the equivalent pixel position on the *rotated/flipped* canvas.
- *
- * The canvas already accounts for dimension swaps when rotation is 90 or 270
- * (finalWidth/finalHeight are swapped). So:
- *   - overlay.x as percentage of the *visual* canvas width  → pixel X
- *   - overlay.y as percentage of the *visual* canvas height → pixel Y
- *
- * Because the preview percentages are relative to the media container's *visual*
- * (post-transform) box, which matches the canvas dimensions after rotation, we
- * can simply map percentage → pixel using final canvas dimensions.
- * The overlay's own rotation then gets applied around that pixel position.
+ * In the export canvas, the image is drawn rotated/flipped and the canvas
+ * dimensions are SWAPPED for 90°/270° rotation (finalWidth = cropH, finalHeight = cropW).
+ * So we must transform the overlay's percentage coordinates to match the
+ * post-rotation visual coordinate system before converting to pixels.
  */
-function overlayPixels(
-  overlay: WatermarkOverlay,
+function transformOverlayCoords(
+  x: number,
+  y: number,
+  rotation: number,
+  flipH: boolean,
+  flipV: boolean,
   canvasWidth: number,
   canvasHeight: number
 ): { x: number; y: number } {
+  let adjX = x;
+  let adjY = y;
+
+  // Apply inverse rotation to account for the image rotation in the export canvas.
+  // CSS rotate(90deg) and ctx.rotate(90°) both rotate clockwise by 90°.
+  // The canvas dimensions are swapped (W↔H) for 90/270, so the percentage
+  // mapping must also swap to stay visually aligned.
+  if (rotation === 90) {
+    // 90° CW: (x, y) in preview → (100-y, x) in rotated canvas space
+    adjX = 100 - y;
+    adjY = x;
+  } else if (rotation === 180) {
+    // 180°: (x, y) → (100-x, 100-y)
+    adjX = 100 - x;
+    adjY = 100 - y;
+  } else if (rotation === 270) {
+    // 270° CW (90° CCW): (x, y) → (y, 100-x)
+    adjX = y;
+    adjY = 100 - x;
+  }
+
+  // Apply inverse flip — if the image is flipped, the coordinate is mirrored
+  if (flipH) {
+    adjX = 100 - adjX;
+  }
+  if (flipV) {
+    adjY = 100 - adjY;
+  }
+
   return {
-    x: (overlay.x / 100) * canvasWidth,
-    y: (overlay.y / 100) * canvasHeight,
+    x: (adjX / 100) * canvasWidth,
+    y: (adjY / 100) * canvasHeight,
   };
 }
 
@@ -183,9 +208,18 @@ export async function renderCompositedCanvas(
   }
 
   // 4. Render Overlays (Logos and Texts)
-  // Overlay coordinates are percentages relative to the visual canvas dimensions.
+  // Overlay coordinates must be transformed from preview space (relative to the
+  // unrotated container) to canvas space (relative to the rotated/swapped canvas).
   for (const overlay of overlays) {
-    const { x: posX, y: posY } = overlayPixels(overlay, canvas.width, canvas.height);
+    const { x: posX, y: posY } = transformOverlayCoords(
+      overlay.x,
+      overlay.y,
+      edits.rotation,
+      edits.flipH,
+      edits.flipV,
+      canvas.width,
+      canvas.height
+    );
 
     ctx.save();
     ctx.globalAlpha = overlay.opacity;

@@ -417,7 +417,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
       <div className="relative w-full h-full flex items-center justify-center">
         <div
           ref={mediaRef}
-          className="relative max-w-[96vw] md:max-w-[80vw] max-h-[58vh] sm:max-h-[68vh] shadow-xl rounded-lg overflow-hidden border border-zinc-800/80 bg-zinc-900 flex items-center justify-center transition-all touch-none select-none"
+          className="relative w-full max-w-[96vw] sm:max-w-[80vw] shadow-xl rounded-lg overflow-hidden border border-zinc-800/80 bg-zinc-900 flex items-center justify-center touch-none select-none"
           style={{
             aspectRatio:
               edits.aspectRatio === '1:1'
@@ -430,7 +430,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
                 ? '4 / 5'
                 : edits.aspectRatio === '4:3'
                 ? '4 / 3'
-                : undefined,
+                : `${item.width} / ${item.height}`,
           }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -450,7 +450,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               }}
               onPlay={() => setIsPlaying(true)}
               onPause={() => setIsPlaying(false)}
-              className="max-w-full max-h-[58vh] sm:max-h-[68vh] object-contain transition-transform"
+              className="w-full h-full object-cover transition-transform"
               style={{ filter: previewFilter, transform: previewTransform }}
             />
           ) : (
@@ -458,7 +458,7 @@ export const InteractiveCanvas: React.FC<InteractiveCanvasProps> = ({
               src={item.cleanedUrl || item.url}
               alt={item.name}
               draggable={false}
-              className="max-w-full max-h-[58vh] sm:max-h-[68vh] object-contain transition-transform select-none"
+              className="w-full h-full object-cover transition-transform select-none"
               style={{ filter: previewFilter, transform: previewTransform }}
             />
           )}
